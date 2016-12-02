@@ -20,7 +20,7 @@ CodeView : SCViewHolder {
     ];
 
     tokens = (
-      keyword: "var|arg|this|true|false",
+      keyword: "var|arg|this|true|false|currentEnvironment|topEnvironment|thisProcess|thisThread|thisFunction",
       envvar: "\\~\\w+",
       class: "[A-Z]\\w*",
       number: "(\\d+(\\.\\d+)?)|(pi)",
@@ -214,12 +214,26 @@ CodeView : SCViewHolder {
 
 
     // non-wordchar delimited things
-    [\number, \class, \envvar, \keyword].do { |thing|
+    [\number, \envvar, \keyword].do { |thing|
       var color = colorScheme[thing];
       var regexp = "(\\W|^)(" ++ tokens[thing] ++ ")(\\W|$)";
 
       view.string.findRegexp(regexp, 0).select({ |item|
         (item[0] >= start) && (item[0] < end) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
+      }).do { |result|
+        view.setStringColor(color, result[0], result[1].size);
+      };
+    };
+
+    // classes
+    [\class].do { |thing|
+      var color = colorScheme[thing];
+      var regexp = "(\\W|^)(" ++ tokens[thing] ++ ")(\\W|$)";
+
+      view.string.findRegexp(regexp, 0).select({ |item|
+        (item[0] >= start) && (item[0] < end) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
+      }).select({ |item|
+        Class.allClasses.select({ |class| class.name == item[1].asSymbol }).size > 0;
       }).do { |result|
         view.setStringColor(color, result[0], result[1].size);
       };
