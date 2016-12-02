@@ -1,5 +1,5 @@
 CodeView : SCViewHolder {
-  var <parent, <font, <>matchChars, <>debug = false, <tabWidth = 2;
+  var <parent, <font, italicfont, <>matchChars, <>debug = false, <tabWidth = 2;
   var <palette, <colorScheme, <tokens;
 
   *new { |parent, bounds|
@@ -8,8 +8,6 @@ CodeView : SCViewHolder {
 
   init { |argparent, argbounds|
     parent = argparent;
-
-    font = Font.monospace;
 
     matchChars = [
       [$", $"],
@@ -27,19 +25,26 @@ CodeView : SCViewHolder {
       symbol: "((')((\\\\{2})*|(.*?[^\\\\](\\\\{2})*))\\2)|(\\\\\\w+)",
       key: "(\\w+):",
       string: "([" ++ ('"'.asString) ++ "])((\\\\{2})*|(.*?[^\\\\](\\\\{2})*))\\1",
-      comment: "//.*?\\n",
+      comment: "//.*?(\\n|$)",
       longComment: "/\\*.*?\\*/",
+      partialComment: "/\\*.*?(\\n|$)",
       punctuation: "[<>\\&\\{\\}\\(\\)\\[\\]\\.\\,\\;:!\\=\\+\\-\\*\\/\\%\\|]"
     );
 
     this.view = TextView(parent, argbounds)
     .enterInterpretsSelection_(false)
-    .font_(font)
     .keyDownAction_({ |...args|
       this.handleKey(*args);
     });
 
-    this.oneLightColorScheme;
+    this.font_(Font.monospace);
+
+    this.oneDarkColorScheme;
+  }
+
+  open { |path|
+    view.open(path);
+    this.colorize;
   }
 
   colorScheme_ { |value|
@@ -69,7 +74,6 @@ CodeView : SCViewHolder {
       key: Color.new255(0, 131, 190).darken(Color.gray(0.5)),
       string: Color.new255(77, 162, 75),
       comment: Color.new255(160, 161, 167),
-      longComment: Color.new255(160, 161, 167),
       punctuation: Color.new255(100, 120, 140)
     ));
   }
@@ -88,7 +92,6 @@ CodeView : SCViewHolder {
       key: Color.new255(101, 162, 0).darken(Color.gray(0.5)),
       string: Color.new255(140, 166, 108),
       comment: Color.new255(215, 174, 155),
-      longComment: Color.new255(215, 174, 155),
       punctuation: Color.new255(120, 100, 80)
     ));
   }
@@ -107,7 +110,6 @@ CodeView : SCViewHolder {
       key: Color.new255(114, 210, 145).darken(Color.gray(0.5)),
       string: Color.new255(145, 188, 114),
       comment: Color.new255(92, 99, 113),
-      longComment: Color.new255(92, 99, 113),
       punctuation: Color(0.6, 0.7, 0.8)
     ));
   }
@@ -126,7 +128,6 @@ CodeView : SCViewHolder {
       key: Color.new255(114, 210, 145).darken(Color.gray(0.6)),
       string: Color(0.6, 1, 0.7),
       comment: Color(0.7, 0.4, 0.5),
-      longComment: Color(0.7, 0.4, 0.5),
       punctuation: Color(0.6, 0.7, 0.8)
     ));
   }
@@ -139,35 +140,59 @@ CodeView : SCViewHolder {
     this.colorize;
   }
 
+  font_ { |afont|
+    font = afont;
+    italicfont = font.copy.italic_(true);
+    this.colorize;
+  }
+
   /* -------- PRIVATE ----------- */
   colorize { |wholething = true|
-    var start, end;
+    var start, end, proposedStart, proposedEnd;
 
+    if (view.string.size == 0) {
+      ^false; // can't colorize nothing
+    };
+
+    // set prelim start & end
     if (wholething) {
-      start = 0; end = view.string.size;
+      proposedStart = 0; proposedEnd = view.string.size;
     } {
       ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
         if (linebreak < view.selectionStart) {
-          start = linebreak;
+          proposedStart = linebreak;
         } {
-          if (end.isNil) { end = linebreak };
+          if (proposedEnd.isNil) { proposedEnd = linebreak };
         };
       };
     };
 
-    // reset everything
-    view.setStringColor(colorScheme[\text], start, end - start);
+    start = proposedStart;
+    end = proposedEnd;
 
-    // set boundary appropriately
+    // extend boundary for long tokens
     [\longComment, \string, \symbol].do { |thing|
       var regexp = tokens[thing];
 
-      view.string.findRegexp(regexp, 0).select({ |item|
+      view.string.findRegexp(regexp, 0).do({ |item|
         var itemStart = item[0], itemEnd = itemStart + item[1].size;
-        ((itemStart >= start) && (itemStart <= end)) ||
-        ((itemEnd >= start) && (itemEnd <= end))
+
+        //[start, end, "item:", itemStart, itemEnd].postcs;
+
+        if ((itemStart <= proposedEnd) && (itemEnd >= proposedStart)) {
+          if (itemStart < start) { start = itemStart };
+          if (itemEnd > end) { end = itemEnd };
+        };
       });
     };
+
+
+
+    // reset everything
+    view.setStringColor(colorScheme[\text], start, end - start);
+    view.setFont(font, start, end - start);
+
+
 
     // non-wordchar delimited things
     [\number, \class, \envvar, \keyword].do { |thing|
@@ -181,8 +206,8 @@ CodeView : SCViewHolder {
       };
     };
 
-    // everything else
-    [\punctuation, \key, \symbol, \string, \comment, \longComment].do { |thing|
+    // other language items
+    [\punctuation, \key, \symbol, \string].do { |thing|
       var color = colorScheme[thing];
       var regexp = tokens[thing];
 
@@ -190,6 +215,19 @@ CodeView : SCViewHolder {
         (item[0] >= start) && (item[0] < end);
       }).do { |result|
         view.setStringColor(color, result[0], result[1].size);
+      };
+
+      // comments
+      [\comment, \partialComment, \longComment].do { |thing|
+        var color = colorScheme[\comment];
+        var regexp = tokens[thing];
+
+        view.string.findRegexp(regexp, 0).select({ |item|
+          (item[0] >= start) && (item[0] < end);
+        }).do { |result|
+          view.setStringColor(color, result[0], result[1].size);
+          view.setFont(italicfont, result[0], result[1].size);
+        };
       };
     };
   }

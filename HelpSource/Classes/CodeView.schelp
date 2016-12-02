@@ -1,0 +1,152 @@
+TITLE:: CodeView
+summary:: a view displaying editable SC code
+categories:: GUI>Views
+related:: Classes/TextView
+
+DESCRIPTION::
+A work-in-progress extension of TextView for editing SuperCollider code.
+
+Features include:
+LIST::
+## Syntax highlighting...
+LIST::
+## upon file/string load (this may take a little while depending on how long your code is)
+## in real time as you type
+## four built-in color schemes, or make your own
+## (TODO support for custom token definitions)
+::
+## Code evaluation, a la SCIDE...
+LIST::
+## Shift-enter to evaluate current line or selection
+## Cmd-enter to evaluate paren block, or entire file, or selection
+## Cmd-. to stop everything
+::
+## Look up documentation...
+LIST::
+## Cmd-D opens up help for the token your cursor is on
+## if you are on a literal, opens help for that literal, etc.
+::
+## Indentation...
+LIST::
+## (TODO adjustible-width) soft tabs
+## preserves indentation on newline
+## auto-indents somewhat intelligently
+## Tab / shift-tab to indent / deindent single line or selected lines
+::
+## Matching characters...
+LIST::
+## auto-insert matching ", ', ], }, )
+## customize which characters to match
+## auto-delete matching characters
+::
+## Key commands...
+LIST::
+## (TODO implement various useful shortcuts from SCIDE)
+## (TODO implement custom key commands)
+::
+::
+
+CLASSMETHODS::
+
+METHOD:: new
+Color scheme defaults to oneDarkColorScheme.
+
+
+INSTANCEMETHODS::
+
+PRIVATE:: init, colorize, indentAt, deindentAt, braceBalance, getOuterParens, getTokenAtCursor, interpret, handleKey, palette, parent;
+
+SUBSECTION:: Text
+
+METHOD:: open
+Opens a file at STRONG::path:: and loads text from it.
+
+If loading the text from the file succeeds, it will replace any current contents of the view.
+
+METHOD:: string
+Get/set the text contained in the view.
+
+SUBSECTION:: Editor behavior
+
+METHOD:: matchChars
+Characters to match, as LINK::Classes/Array:: of Arrays STRONG::[[beginChar, endChar], ...]::. Defaults to:
+CODE::
+[
+  [$", $"],
+  [$', $'],
+  [$[, $]],
+  [$(, $)],
+  [${, $}]
+]
+::
+
+METHOD:: tabWidth
+Width of each soft tab in spaces. Currently not editable.
+
+METHOD:: tokens
+Syntax tokens for colorizer. Currently not editable.
+
+METHOD:: debug
+Set to STRONG::true:: to post the key handler arguments. Useful for developing features.
+
+
+
+SUBSECTION:: Font & color schemes
+
+METHOD:: font
+Get/set the LINK::Classes/Font:: of the view.
+
+METHOD:: oneDarkColorScheme, oneLightColorScheme
+Based on Atom's default color schemes.
+
+METHOD:: darkColorScheme, lightColorScheme
+The light is greenish and earthy, kind of nice.
+
+
+
+
+METHOD:: colorScheme
+Use to directly define your own color schemes. This takes a Dictionary of colors. For example, here is the oneLightColorScheme implementation:
+CODE::
+c = CodeView().front;
+c.colorScheme_((
+  background: Color.new255(250, 250, 250),
+  text: Color.new255(56, 58, 66),
+  selectionBackground: Color.new255(229, 229, 230),
+  selectionText: Color.new255(56, 58, 66),
+  keyword: Color.new255(168, 28, 166),
+  envvar: Color.new255(230, 85, 68),
+  class: Color.new255(194, 133, 0),
+  number: Color.new255(156, 109, 0),
+  symbol: Color.new255(0, 131, 190),
+  key: Color.new255(0, 131, 190).darken(Color.gray(0.5)),
+  string: Color.new255(77, 162, 75),
+  comment: Color.new255(160, 161, 167),
+  longComment: Color.new255(160, 161, 167),
+  punctuation: Color.new255(100, 120, 140)
+));
+::
+
+
+
+EXAMPLES::
+
+code::
+// New CodeView
+c = CodeView(bounds: Rect(0, 0, 600, 900)).front;
+
+// Set the text
+c.string = "/* testing 1 2 3 */\ns.boot;\na = Synth(\default);\na.release;";
+
+// Open a .scd file
+FileDialog({ |path| c.open(path) }, stripResult:true);
+
+// Change the color scheme
+c.oneLightColorScheme;
+c.oneDarkColorScheme;
+c.lightColorScheme;
+c.darkColorScheme;
+
+// Change the font
+c.font = Font.monospace.size_(10);
+::
