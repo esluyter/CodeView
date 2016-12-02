@@ -80,6 +80,12 @@ CODE::
 ]
 ::
 
+METHOD:: modKeyHandler
+Called on key down, if there's no default assignment for that key combination. Allows you to implement custom keybindings / handling. Passed arguments STRONG::view, char, mod, unicode, keycode, key::.
+
+METHOD:: keyUpAction
+Set the action to be performed when key is lifted. Passed arguments STRONG::view, char, mod, unicode, keycode, key::.
+
 METHOD:: tabWidth
 Width of each soft tab in spaces. Currently not editable.
 
@@ -122,11 +128,15 @@ c.colorScheme_((
   key: Color.new255(0, 131, 190).darken(Color.gray(0.5)),
   string: Color.new255(77, 162, 75),
   comment: Color.new255(160, 161, 167),
-  longComment: Color.new255(160, 161, 167),
   punctuation: Color.new255(100, 120, 140)
 ));
 ::
 
+METHOD:: customTokens
+Takes a Dictionary of token names / regexp strings to colorize.
+
+METHOD:: customColors
+Takes a Dictionary of names corresponding to customTokens, and their associated colors.
 
 
 EXAMPLES::

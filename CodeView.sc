@@ -1,6 +1,8 @@
 CodeView : SCViewHolder {
   var <parent, <font, italicfont, <>matchChars, <>debug = false, <tabWidth = 2;
   var <palette, <colorScheme, <tokens;
+  var <customTokens, <customColors;
+  var <>modKeyHandler;
 
   *new { |parent, bounds|
     ^super.new.init(parent, bounds);
@@ -132,6 +134,16 @@ CodeView : SCViewHolder {
     ));
   }
 
+  customTokens_ { |value|
+    customTokens = value;
+    this.colorize;
+  }
+
+  customColors_ { |value|
+    customColors = value;
+    this.colorize;
+  }
+
   string {
     ^view.string;
   }
@@ -144,6 +156,13 @@ CodeView : SCViewHolder {
     font = afont;
     italicfont = font.copy.italic_(true);
     this.colorize;
+  }
+
+  keyUpAction {
+    ^view.keyUpAction;
+  }
+  keyUpAction_ { |action|
+    view.keyUpAction = action;
   }
 
   /* -------- PRIVATE ----------- */
@@ -216,24 +235,40 @@ CodeView : SCViewHolder {
       }).do { |result|
         view.setStringColor(color, result[0], result[1].size);
       };
+    };
 
-      // comments
-      [\comment, \partialComment, \longComment].do { |thing|
-        var color = colorScheme[\comment];
-        var regexp = tokens[thing];
+    // comments
+    [\comment, \partialComment, \longComment].do { |thing|
+      var color = colorScheme[\comment];
+      var regexp = tokens[thing];
 
-        view.string.findRegexp(regexp, 0).select({ |item|
-          (item[0] >= start) && (item[0] < end);
-        }).do { |result|
-          view.setStringColor(color, result[0], result[1].size);
-          view.setFont(italicfont, result[0], result[1].size);
+      view.string.findRegexp(regexp, 0).select({ |item|
+        (item[0] >= start) && (item[0] < end);
+      }).do { |result|
+        view.setStringColor(color, result[0], result[1].size);
+        view.setFont(italicfont, result[0], result[1].size);
+      };
+    };
+
+    // custom
+    if (customTokens.notNil) {
+      customTokens.keysValuesDo { |thing, regexp|
+        var color = customColors[thing];
+
+        if (color.notNil) {
+          view.string.findRegexp(regexp, 0).select({ |item|
+            (item[0] >= start) && (item[0] < end);
+          }).do { |result|
+            view.setStringColor(color, result[0], result[1].size);
+          };
         };
       };
     };
+
   }
 
   indentAt { |lineStart|
-    view.setString($ .dup(tabWidth).toString, lineStart, 0);
+    view.setString(String.newFrom($ .dup(tabWidth)), lineStart, 0);
     ^tabWidth;
   }
 
@@ -474,14 +509,18 @@ CodeView : SCViewHolder {
 
     // Up on top line goes to beginning
     if ((key == 16777235) && cursorOnFirstLine) { // up
-      view.select(0, if (mod.isShift) { selectionStart + selectionSize } { 0 });
-      ^true;
+      if (mod.isCmd.not && mod.isAlt.not) {
+        view.select(0, if (mod.isShift) { selectionStart + selectionSize } { 0 });
+        ^true;
+      };
     };
 
     // Down on bottom line goes to end
     if ((key == 16777237) && cursorOnLastLine && mod.isShift.not) { // down
-      view.select(view.string.size, 0);
-      ^true;
+      if (mod.isCmd.not && mod.isAlt.not) {
+        view.select(view.string.size, 0);
+        ^true;
+      };
     };
 
     // Execute code if necessary, or insert newline with correct indent
@@ -504,10 +543,10 @@ CodeView : SCViewHolder {
       } { // ...otherwise insert newline with correct indent
         # runningOffset, extraNewLine = this.braceBalance(lineToCursor, stringForward[0]); // add or subtract from total indent
         if (extraNewLine) {
-          view.setString("\n" ++ $ .dup(currentIndentSpaces).toString, selectionStart, selectionSize);
+          view.setString("\n" ++ String.newFrom($ .dup(currentIndentSpaces)), selectionStart, selectionSize);
           view.select(selectionStart, 0);
         };
-        view.setString("\n" ++ $ .dup(max(currentIndentSpaces + runningOffset, 0)).toString, selectionStart, selectionSize);
+        view.setString("\n" ++ String.newFrom($ .dup(max(currentIndentSpaces + runningOffset, 0))), selectionStart, selectionSize);
       };
 
       ^true;
@@ -556,7 +595,7 @@ CodeView : SCViewHolder {
 
     // don't handle modifiers or escape...
     if ((char.ascii < 32)) {
-      ^nil;
+      ^modKeyHandler.(view, char, mod, unicode, keycode, key);
     };
 
     // ...otherwise insert character
