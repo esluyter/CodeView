@@ -23,6 +23,7 @@ CodeView : SCViewHolder {
       keyword: "var|arg|this|true|false|currentEnvironment|topEnvironment|thisProcess|thisThread|thisFunction",
       envvar: "\\~\\w+",
       class: "[A-Z]\\w*",
+      method: "\\.\\w+",
       number: "(\\d+(\\.\\d+)?)|(pi)",
       symbol: "((')((\\\\{2})*|(.*?[^\\\\](\\\\{2})*))\\2)|(\\\\\\w+)",
       key: "(\\w+):",
@@ -71,6 +72,7 @@ CodeView : SCViewHolder {
       keyword: Color.new255(168, 28, 166),
       envvar: Color.new255(230, 85, 68),
       class: Color.new255(194, 133, 0),
+      method: Color.new255(60, 116, 246),
       number: Color.new255(156, 109, 0),
       symbol: Color.new255(0, 131, 190),
       key: Color.new255(0, 131, 190).darken(Color.gray(0.5)),
@@ -89,6 +91,7 @@ CodeView : SCViewHolder {
       keyword: Color.new255(141, 53, 0),
       envvar: Color.new255(153, 51, 62),
       class: Color.new255(52, 0, 207),
+      method: Color.new255(9, 3, 0),
       number: Color.new255(211, 59, 118),
       symbol: Color.new255(101, 162, 0),
       key: Color.new255(101, 162, 0).darken(Color.gray(0.5)),
@@ -107,6 +110,7 @@ CodeView : SCViewHolder {
       keyword: Color.new255(199, 117, 223),
       envvar: Color.new255(226, 107, 115),
       class: Color.new255(230, 193, 118),
+      method: Color.new255(93, 174, 242),
       number: Color.new255(210, 155, 98),
       symbol: Color.new255(81, 182, 195),
       key: Color.new255(114, 210, 145).darken(Color.gray(0.5)),
@@ -125,6 +129,7 @@ CodeView : SCViewHolder {
       keyword: Color(0.2, 0.4, 0.7),
       envvar: Color(0.9, 0.9, 0.6),
       class: Color(0.6, 0.95, 0.95),
+      method: Color.gray(0.85),
       number: Color(1, 0.8, 0.9),
       symbol: Color(0.5, 0.9, 0.6),
       key: Color.new255(114, 210, 145).darken(Color.gray(0.6)),
@@ -186,8 +191,8 @@ CodeView : SCViewHolder {
       };
     };
 
-    start = proposedStart;
-    end = proposedEnd;
+    start = proposedStart ?? 0;
+    end = proposedEnd ?? view.string.size;
 
     // extend boundary for long tokens
     [\longComment, \string, \symbol].do { |thing|
@@ -211,7 +216,17 @@ CodeView : SCViewHolder {
     view.setStringColor(colorScheme[\text], start, end - start);
     view.setFont(font, start, end - start);
 
+    // methods & punctuation
+    [\method, \punctuation].do { |thing|
+      var color = colorScheme[thing];
+      var regexp = tokens[thing];
 
+      view.string.findRegexp(regexp, 0).select({ |item|
+        (item[0] >= start) && (item[0] < end);
+      }).do { |result|
+        view.setStringColor(color, result[0], result[1].size);
+      };
+    };
 
     // non-wordchar delimited things
     [\number, \envvar, \keyword].do { |thing|
@@ -240,7 +255,7 @@ CodeView : SCViewHolder {
     };
 
     // other language items
-    [\punctuation, \key, \symbol, \string].do { |thing|
+    [\key, \symbol, \string].do { |thing|
       var color = colorScheme[thing];
       var regexp = tokens[thing];
 
@@ -278,7 +293,6 @@ CodeView : SCViewHolder {
         };
       };
     };
-
   }
 
   indentAt { |lineStart|
@@ -356,10 +370,26 @@ CodeView : SCViewHolder {
     };
   }
 
-  getTokenAtCursor {
+  getTokenAtCursor { |getPrevToken = false, cursorOverride|
     var str = view.string;
-    var selectionStart = view.selectionStart;
-    var token, type;
+    var selectionStart = cursorOverride ?? max(view.selectionStart - 1, 0);
+    var token, type, start;
+    var prevToken = [];
+
+    [\punctuation, \method].do { |thing|
+      var regexp = tokens[thing];
+
+      var item = str.findRegexp(regexp, 0).select({ |item|
+        var itemStart = item[0], itemEnd = item[0] + item[1].size;
+        (selectionStart >= itemStart) && (selectionStart < itemEnd);
+      })[0];
+
+      if (item.notNil) {
+        start = item[0];
+        token = item[1];
+        type = thing;
+      };
+    };
 
     // non-wordchar delimited things
     [\number, \class, \envvar, \keyword].do { |thing|
@@ -371,13 +401,14 @@ CodeView : SCViewHolder {
       })[0];
 
       if (item.notNil) {
+        start = item[0];
         token = item[1];
         type = thing;
       };
     };
 
     // everything else
-    [\punctuation, \key, \symbol, \string, \comment, \longComment].do { |thing|
+    [\key, \symbol, \string, \comment, \longComment].do { |thing|
       var regexp = tokens[thing];
 
       var item = str.findRegexp(regexp, 0).select({ |item|
@@ -386,6 +417,7 @@ CodeView : SCViewHolder {
       })[0];
 
       if (item.notNil) {
+        start = item[0];
         token = item[1];
         type = thing;
       };
@@ -400,6 +432,7 @@ CodeView : SCViewHolder {
       })[0];
 
       if (item.notNil) {
+        start = item[0];
         token = item[1];
         type = \word;
       };
@@ -407,11 +440,23 @@ CodeView : SCViewHolder {
 
     // very last resort -- just take char
     if (token.isNil) {
+      start = selectionStart;
       token = str[selectionStart];
       type = \char;
     };
 
-    ^[token, type];
+    // get previous token if necessary
+    if (getPrevToken) {
+      prevToken = this.getTokenAtCursor(false, start - 1);
+    };
+
+    // take . out of method name
+    if (type == \method) {
+      start = start + 1;
+      token = token[1..];
+    };
+
+    ^([token, type] ++ prevToken);
   }
 
   interpret { |toInterpret|
@@ -572,9 +617,14 @@ CodeView : SCViewHolder {
         HelpBrowser.openHelpFor(view.selectedString);
         ^true;
       } {
-        currentToken = this.getTokenAtCursor;
+        currentToken = this.getTokenAtCursor(true);
 
-        if ([\class, \keyword, \word].indexOf(currentToken[1]).notNil) {
+        if ((currentToken[1] == \method) && (currentToken[3] == \class)) {
+          HelpBrowser.goTo(SCDoc.findHelpFile(currentToken[2]) ++ "#*" ++ currentToken[0]);
+          ^true;
+        };
+
+        if ([\class, \keyword, \method, \word].indexOf(currentToken[1]).notNil) {
           HelpBrowser.openHelpFor(currentToken[0]);
           ^true;
         };

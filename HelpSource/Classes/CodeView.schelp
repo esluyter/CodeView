@@ -13,17 +13,18 @@ LIST::
 ## upon file/string load (this may take a little while depending on how long your code is)
 ## in real time as you type
 ## four built-in color schemes, or make your own
-## (TODO support for custom token definitions)
+## smart SC class highlighting
+## support for custom token definitions
 ::
 ## Code evaluation, a la SCIDE...
 LIST::
-## Shift-enter to evaluate current line or selection
-## Cmd-enter to evaluate paren block, or entire file, or selection
-## Cmd-. to stop everything
+## shift-enter to evaluate current line or selection
+## cmd-enter to evaluate paren block, or entire file, or selection
+## cmd-. to stop everything
 ::
 ## Look up documentation...
 LIST::
-## Cmd-D opens up help for the token your cursor is on
+## cmd-D opens up help for the token your cursor is on
 ## if you are on a literal, opens help for that literal, etc.
 ::
 ## Indentation...
@@ -31,7 +32,7 @@ LIST::
 ## (TODO adjustible-width) soft tabs
 ## preserves indentation on newline
 ## auto-indents somewhat intelligently
-## Tab / shift-tab to indent / deindent single line or selected lines
+## tab / shift-tab to indent / deindent single line or selected lines
 ::
 ## Matching characters...
 LIST::
@@ -41,8 +42,8 @@ LIST::
 ::
 ## Key commands...
 LIST::
+## supports custom key commands
 ## (TODO implement various useful shortcuts from SCIDE)
-## (TODO implement custom key commands)
 ::
 ::
 
@@ -146,7 +147,7 @@ code::
 c = CodeView(bounds: Rect(0, 0, 600, 900)).front;
 
 // Set the text
-c.string = "/* testing 1 2 3 */\ns.boot;\na = Synth(\default);\na.release;";
+c.string = "/* testing 1 2 3 */\ns.boot;\na = Synth(\\default);\na.release;";
 
 // Open a .scd file
 FileDialog({ |path| c.open(path) }, stripResult:true);
