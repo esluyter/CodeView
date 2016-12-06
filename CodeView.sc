@@ -2,7 +2,7 @@ CodeView : SCViewHolder {
   var <parent, <font, italicfont, <>matchChars, <>debug = false, <tabWidth = 2;
   var <palette, <colorScheme, <tokens;
   var <customTokens, <customColors;
-  var <>modKeyHandler;
+  var <>modKeyHandler, <>keyUpAction;
 
   *new { |parent, bounds|
     ^super.new.init(parent, bounds);
@@ -23,7 +23,7 @@ CodeView : SCViewHolder {
       keyword: "var|arg|this|true|false|currentEnvironment|topEnvironment|thisProcess|thisThread|thisFunction",
       envvar: "\\~\\w+",
       class: "[A-Z]\\w*",
-      method: "\\.\\w*|\\W\\w+\\s*(\\(|\\{)",
+      method: "\\.[a-z_]\\w*|\\W[a-z_]\\w+\\s*(\\(|\\{)",
       number: "(\\-)?((\\d+(\\.\\d+)?)|pi|inf)",
       symbol: "((')((\\\\{2})*|(.*?[^\\\\](\\\\{2})*))\\2)|(\\\\\\w+)",
       key: "(\\w+):",
@@ -36,8 +36,20 @@ CodeView : SCViewHolder {
 
     this.view = TextView(parent, argbounds)
     .enterInterpretsSelection_(false)
+    .mouseUpAction_({
+      this.changed(\mouseClicked);
+    })
     .keyDownAction_({ |...args|
       this.handleKey(*args);
+    })
+    .keyUpAction_({ |view, char, mod, unicode, keycode, key|
+      // broadcast escape
+      if (char.ascii == 27) {
+        this.changed(\escapePressed);
+      } {
+        this.changed(\keyPressed);
+      };
+      keyUpAction.(view, char, mod, unicode, keycode, key);
     });
 
     this.font_(Font.monospace);
@@ -48,6 +60,11 @@ CodeView : SCViewHolder {
   open { |path|
     view.open(path);
     this.colorize;
+  }
+
+  makeCompleteWindow { |bounds|
+    bounds = bounds ?? Rect(600, Window.screenBounds.height, 300, 300);
+    ^CodeViewCompleteWindow(this, bounds);
   }
 
   colorScheme_ { |value|
@@ -161,13 +178,6 @@ CodeView : SCViewHolder {
     font = afont;
     italicfont = font.copy.italic_(true);
     this.colorize;
-  }
-
-  keyUpAction {
-    ^view.keyUpAction;
-  }
-  keyUpAction_ { |action|
-    view.keyUpAction = action;
   }
 
   select { |start, size|
@@ -385,6 +395,8 @@ CodeView : SCViewHolder {
     var selectionStart = cursorOverride ?? max(view.selectionStart - 1, 0);
     var token, type, start;
     var prevToken = [];
+
+    if ("\\s".matchRegexp(str[selectionStart].asString)) { selectionStart = selectionStart + 1 };
 
     [\punctuation, \method].do { |thing|
       var regexp = tokens[thing];
