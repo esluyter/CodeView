@@ -1,5 +1,5 @@
 CodeViewCompleteWindow : SCViewHolder {
-  var <win, <codeView, <height;
+  var <win, <codeView, <height, <>autoHide = false;
 
   *new { |codeView, bounds|
     ^super.new.init(codeView, bounds);
@@ -39,16 +39,20 @@ CodeViewCompleteWindow : SCViewHolder {
   }
 
   hideCompletions {
-    if (win.bounds.height != 1) {
-      height = win.bounds.height;
-      win.bounds = win.bounds.height_(1).top_(win.bounds.top + height - 1);
-      view.items = [];
+    view.items = [];
+    if (win.bounds.height != 1 && autoHide) {
+      this.forceHideCompletions;
     };
+  }
+
+  forceHideCompletions {
+    height = win.bounds.height;
+    win.bounds = win.bounds.height_(1).top_(win.bounds.top + height - 1);
   }
 
   update { |obj, what|
     if (what == \escapePressed) {
-      this.hideCompletions;
+      this.forceHideCompletions;
       ^false;
     };
     if (what == \keyPressed || (what == \mouseClicked)) {
@@ -178,7 +182,7 @@ CodeViewCompleteWindow : SCViewHolder {
             view.items = if (method.argNames.notNil) {
               [class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"] ++ (method.argumentString ?? "").split($,).collect({ |item| "   " ++ item.stripWhiteSpace });
             } {
-              [class.name ++ ":" ++ token ++ "()", "   [ no arguments ]"];
+              [class.name ++ ":" ++ token ++ "()", ""];
             };
           } { // instance method
             class = Class.allClasses.select({ |item|
@@ -186,7 +190,7 @@ CodeViewCompleteWindow : SCViewHolder {
             });
             if (class.size == 1) {
               method = class[0].findMethod(token.asSymbol);
-              view.items = [class[0].name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"] ++ (method.argumentString ?? "   [ no arguments ]").split($,).collect({ |item| "   " ++ item.stripWhiteSpace });
+              view.items = [class[0].name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"] ++ (method.argumentString ?? "").split($,).collect({ |item| "   " ++ item.stripWhiteSpace });
             } {
               view.items = ["." ++ token] ++ class.collect({ |item|
                 var method = item.findMethod(token.asSymbol);

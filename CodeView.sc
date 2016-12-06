@@ -62,8 +62,10 @@ CodeView : SCViewHolder {
     this.colorize;
   }
 
-  makeCompleteWindow { |bounds|
-    bounds = bounds ?? Rect(600, Window.screenBounds.height, 300, 300);
+  makeCompleteWindow { |apoint| // in offset from top left corner
+    var bounds;
+    apoint = apoint ?? (600@0);
+    bounds = Rect(apoint.x, Window.screenBounds.height - apoint.y, 300, 300);
     ^CodeViewCompleteWindow(this, bounds);
   }
 
