@@ -171,7 +171,7 @@ CodeView : SCViewHolder {
     ^view.string;
   }
   string_ { |string|
-    view.string_(string);
+    view.string_(string.reject({|char| (char.ascii < 32 && (char != $\n)) || (char.ascii == 127)}));
     this.colorize;
   }
 
