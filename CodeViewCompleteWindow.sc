@@ -1,11 +1,14 @@
 CodeViewCompleteWindow : SCViewHolder {
-  var <win, <codeView, <height, <>autoHide = false;
+  var <win, <codeView, <height, <>autoHide = true, hideRout, lastToken, <isFront = false,
+  <>toFrontAction, <>endFrontAction, codeViewParentWindow;
 
-  *new { |codeView, bounds|
-    ^super.new.init(codeView, bounds);
+  *new { |codeView, bounds, codeViewParentWindow|
+    ^super.new.init(codeView, bounds, codeViewParentWindow);
   }
 
-  init { |argcodeView, bounds|
+  init { |argcodeView, bounds, argcodeViewParentWindow, border = true|
+    codeViewParentWindow = argcodeViewParentWindow;
+
     codeView = argcodeView;
     codeView.addDependant(this);
 
@@ -13,7 +16,15 @@ CodeViewCompleteWindow : SCViewHolder {
     height = bounds.height;
     bounds = bounds.height_(1);
 
-    win = Window("Auto Complete", bounds)
+    win = Window("Auto Complete", bounds, border: border)
+    .toFrontAction_({
+      toFrontAction.();
+      isFront = true;
+    })
+    .endFrontAction_({
+      endFrontAction.();
+      isFront = false;
+    })
     .onClose_({
       codeView.removeDependant(this);
     })
@@ -26,6 +37,13 @@ CodeViewCompleteWindow : SCViewHolder {
     .palette_(codeView.palette)
     .font_(codeView.font)
     .background_(codeView.palette.base.alpha_(0.9));
+  }
+
+  visible {
+    ^win.visible;
+  }
+  visible_ { |bool|
+    win.visible = bool;
   }
 
   close {
@@ -41,7 +59,11 @@ CodeViewCompleteWindow : SCViewHolder {
   hideCompletions {
     view.items = [];
     if (win.bounds.height != 1 && autoHide) {
-      this.forceHideCompletions;
+      hideRout.stop;
+      hideRout = fork {
+        0.5.wait;
+        defer { this.forceHideCompletions };
+      };
     };
   }
 
@@ -72,6 +94,12 @@ CodeViewCompleteWindow : SCViewHolder {
         this.hideCompletions;
         ^false
       };
+
+      // don't do anything if the token is the same
+      if (token == lastToken) {
+        ^false;
+      };
+      lastToken = token;
 
       if (type == \class) {
         this.showCompletions;
