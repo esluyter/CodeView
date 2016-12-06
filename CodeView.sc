@@ -23,8 +23,8 @@ CodeView : SCViewHolder {
       keyword: "var|arg|this|true|false|currentEnvironment|topEnvironment|thisProcess|thisThread|thisFunction",
       envvar: "\\~\\w+",
       class: "[A-Z]\\w*",
-      method: "\\.\\w+",
-      number: "(\\d+(\\.\\d+)?)|(pi)",
+      method: "\\.\\w*|\\W\\w+\\s*(\\(|\\{)",
+      number: "(\\-)?((\\d+(\\.\\d+)?)|pi|inf)",
       symbol: "((')((\\\\{2})*|(.*?[^\\\\](\\\\{2})*))\\2)|(\\\\\\w+)",
       key: "(\\w+):",
       string: "([" ++ ('"'.asString) ++ "])((\\\\{2})*|(.*?[^\\\\](\\\\{2})*))\\1",
@@ -170,6 +170,16 @@ CodeView : SCViewHolder {
     view.keyUpAction = action;
   }
 
+  select { |start, size|
+    view.select(start, size);
+  }
+  selectionStart {
+    ^view.selectionStart;
+  }
+  selectionSize {
+    ^view.selectionSize;
+  }
+
   /* -------- PRIVATE ----------- */
   colorize { |wholething = true|
     var start, end, proposedStart, proposedEnd;
@@ -248,7 +258,7 @@ CodeView : SCViewHolder {
       view.string.findRegexp(regexp, 0).select({ |item|
         (item[0] >= start) && (item[0] < end) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
       }).select({ |item|
-        Class.allClasses.select({ |class| class.name == item[1].asSymbol }).size > 0;
+        Class.allClasses.detect({ |class| class.name == item[1].asSymbol }).notNil;
       }).do { |result|
         view.setStringColor(color, result[0], result[1].size);
       };
@@ -456,7 +466,7 @@ CodeView : SCViewHolder {
       token = token[1..];
     };
 
-    ^([token, type] ++ prevToken);
+    ^([token.asString.stripWhiteSpace, type] ++ prevToken);
   }
 
   interpret { |toInterpret|
@@ -614,7 +624,7 @@ CodeView : SCViewHolder {
     // cmd-D look up documentation
     if ((key == 68) && (mod.isCmd)) {
       if (selectionSize != 0) {
-        HelpBrowser.openHelpFor(view.selectedString);
+        HelpBrowser.openHelpFor(view.selectedString.stripWhiteSpace);
         ^true;
       } {
         currentToken = this.getTokenAtCursor(true);
