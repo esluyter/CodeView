@@ -4,6 +4,7 @@ CodeView : SCViewHolder {
   var <customTokens, <customColors;
   var <>modKeyHandler, <>keyUpAction;
   var paste, suppressKeyPress = false;
+  var <>interpretArgs;
 
   *new { |parent, bounds|
     ^super.new.init(parent, bounds);
@@ -506,10 +507,23 @@ CodeView : SCViewHolder {
   }
 
   interpret { |toInterpret|
-    try {
-      if (toInterpret.stripWhiteSpace != "") {
-        ("-> " ++ toInterpret.interpret).postln;
+    var argNames = "", argValues = [];
+
+    if (toInterpret.stripWhiteSpace == "") { ^false };
+
+    if (interpretArgs.notNil) {
+      argNames = [];
+      interpretArgs.keysValuesDo { |k, v|
+        argNames = argNames.add(k);
+        argValues = argValues.add(v);
       };
+      argNames = "|" ++ argNames.join(", ") ++ "|";
+    };
+
+    toInterpret = "{ " ++ argNames ++ "\n" ++ toInterpret ++ "\n}";
+
+    try {
+      ("-> " ++ toInterpret.interpret.valueArray(argValues)).postln;
     } { |error|
       error.reportError;
     };
@@ -536,7 +550,7 @@ CodeView : SCViewHolder {
     };
     var lineSize = lineEnd - lineStart;
     var lineToCursor = view.string[lineStart..(selectionStart - 1)];
-    var currentLineEnd = (selectionStart + (stringFromSelectionStart.find($\n) ?? 0));
+    var currentLineEnd = (selectionStart + (stringFromSelectionStart.find($\n) ?? stringFromSelectionStart.size));
     var currentLine = (if ((currentLineEnd - lineStart) == 0) { "" } { view.string[lineStart..(currentLineEnd - 1)] });
 
     var currentIndentSpaces = currentLine.findRegexpAt("(\\s*)", 0)[1];
