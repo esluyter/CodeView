@@ -3,6 +3,7 @@ CodeView : SCViewHolder {
   var <palette, <colorScheme, <tokens;
   var <customTokens, <customColors;
   var <>modKeyHandler, <>keyUpAction;
+  var paste;
 
   *new { |parent, bounds|
     ^super.new.init(parent, bounds);
@@ -43,11 +44,17 @@ CodeView : SCViewHolder {
       this.handleKey(*args);
     })
     .keyUpAction_({ |view, char, mod, unicode, keycode, key|
+      var pasteSize;
       // broadcast escape
       if (char.ascii == 27) {
         this.changed(\escapePressed);
       } {
         this.changed(\keyPressed);
+      };
+      if (paste.notNil) {
+        pasteSize = view.string.size - paste[\stringSize];
+        this.colorize(false, paste[\start], paste[\start] + pasteSize);
+        paste = nil;
       };
       keyUpAction.(view, char, mod, unicode, keycode, key);
     });
@@ -192,8 +199,8 @@ CodeView : SCViewHolder {
   }
 
   /* -------- PRIVATE ----------- */
-  colorize { |wholething = true|
-    var start, end, proposedStart, proposedEnd;
+  colorize { |wholething = true, proposedStart, proposedEnd|
+    var start, end;
 
     if (view.string.size == 0) {
       ^false; // can't colorize nothing
@@ -202,7 +209,10 @@ CodeView : SCViewHolder {
     // set prelim start & end
     if (wholething) {
       proposedStart = 0; proposedEnd = view.string.size;
-    } {
+    };
+
+    // if both are nil, take line break
+    if (proposedStart.isNil && proposedEnd.isNil) {
       ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
         if (linebreak < view.selectionStart) {
           proposedStart = linebreak;
@@ -221,8 +231,6 @@ CodeView : SCViewHolder {
 
       view.string.findRegexp(regexp, 0).do({ |item|
         var itemStart = item[0], itemEnd = itemStart + item[1].size;
-
-        //[start, end, "item:", itemStart, itemEnd].postcs;
 
         if ((itemStart <= proposedEnd) && (itemEnd >= proposedStart)) {
           if (itemStart < start) { start = itemStart };
@@ -524,18 +532,26 @@ CodeView : SCViewHolder {
 
     if (debug) { ["view", view, "char", char, "mod", mod, "unicode", unicode, "keycode", keycode, "key", key].postcs; };
 
-    // Add matching character if necessary
+    // Add matching character if necessary, or refrain from doubling
     matchChars.do { |arr|
       var beginChar = arr[0], endChar = arr[1];
+
+      // don't double end char
+      if (selectionSize == 0 && (char == endChar) && (char == view.string[selectionStart])) {
+        // just move the selection forward
+        view.select(selectionStart + 1, 0);
+        ^true;
+      };
+
+      // match chars
       if (char == beginChar) {
         if (selectionSize == 0) {
           view.setString(beginChar ++ endChar, selectionStart, 0);
-          view.select(selectionStart + 1, 0);
         } {
           view.selectedString = beginChar ++ view.selectedString ++ endChar;
-          view.select(selectionStart + 1, selectionSize);
         };
-        this.colorize(false);
+        this.colorize(false, selectionStart, selectionStart + selectionSize + 2);
+        view.select(selectionStart + 1, selectionSize);
         ^true;
       };
     };
@@ -563,6 +579,10 @@ CodeView : SCViewHolder {
         this.colorize(false);
         ^true;
       };
+
+      view.setString("", selectionStart, selectionSize);
+      this.colorize(false);
+      ^true;
     };
 
     // Tab indents, shift-tab deindents line/selection
@@ -678,6 +698,10 @@ CodeView : SCViewHolder {
           ^true;
         };
       };
+    };
+
+    if (key == 86 && mod.isCmd) { // paste
+      paste = (start: selectionStart, stringSize: view.string.size - selectionSize);
     };
 
     // don't handle modifiers or escape...
