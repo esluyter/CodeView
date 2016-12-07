@@ -1,6 +1,6 @@
 CodeViewCompleteWindow : SCViewHolder {
   var <win, <codeView, <height, <>autoHide = true, hideRout, lastToken, <isFront = false,
-  <>toFrontAction, <>endFrontAction, codeViewParentWindow;
+  <>toFrontAction, <>endFrontAction, codeViewParentWindow, <listActions, completed, selected, colors, selectionOffset;
 
   *new { |codeView, bounds, codeViewParentWindow|
     ^super.new.init(codeView, bounds, codeViewParentWindow);
@@ -36,7 +36,12 @@ CodeViewCompleteWindow : SCViewHolder {
     .resize_(5)
     .palette_(codeView.palette)
     .font_(codeView.font)
-    .background_(codeView.palette.base.alpha_(0.9));
+    .background_(codeView.palette.base.alpha_(0.9))
+    .action_({
+      listActions[view.value].();
+      //codeViewParentWindow.front;
+      codeView.focus;
+    });
   }
 
   visible {
@@ -51,6 +56,7 @@ CodeViewCompleteWindow : SCViewHolder {
   }
 
   showCompletions {
+    hideRout.stop;
     if (win.bounds.height == 1) {
       win.bounds = win.bounds.height_(height).top_(win.bounds.top - height + 1);
     };
@@ -72,22 +78,61 @@ CodeViewCompleteWindow : SCViewHolder {
     win.bounds = win.bounds.height_(1).top_(win.bounds.top + height - 1);
   }
 
+  complete { |string, start, size|
+    codeView.setString(string, start, size);
+  }
+
+  select { |index|
+    var colors = Color.clear.dup(listActions.size);
+    selected = index;
+    if (selected + selectionOffset < listActions.size) {
+      colors[selectionOffset + selected] = view.background.complementary.blend(Color.yellow).alpha_(0.25);
+    };
+    if (completed.notNil) {
+      colors[selectionOffset + completed] = view.background.complementary.blend(Color.green).alpha_(0.2);
+    };
+    view.colors = colors;
+  }
+
   update { |obj, what|
     if (what == \escapePressed) {
       this.forceHideCompletions;
       ^false;
     };
-    if (what == \keyPressed || (what == \mouseClicked)) {
+
+    if (what == \cmdup) {
+      this.select((selected - 1) % (listActions.size - selectionOffset));
+    };
+    if (what == \cmddown) {
+      this.select((selected + 1) % (listActions.size - selectionOffset));
+    };
+    if (what == \cmdleft || (what == \cmdright) || (what == \shiftspace)) {
+      listActions[selected + selectionOffset].();
+    };
+
+    if (what == \keyPressed || (what == \mouseClicked) || (what == \textInserted)) {
       var pos = codeView.selectionStart - 1;
       var braceCount = 0;
       var str = codeView.string;
 
-      var token = codeView.getTokenAtCursor(true);
+      var token = codeView.getTokenAtCursor(true, getStart: true);
       var type = token[1];
-      var prevtoken = token[2];
-      var prevtype = token[3];
-      var complete, method, methods, class, items;
+      var start = token[2];
+      var prevtoken = token[3];
+      var prevtype = token[4];
+      var complete = false, method, methods, class, items;
       token = token[0];
+
+      // don't do anything if the token is the same
+      if (token == lastToken && (what != \textInserted)) {
+        ^false;
+      };
+      lastToken = token;
+
+      // reset list actions
+      listActions = [nil];
+      selected = 0;
+      completed = nil;
 
       // don't auto complete if there's a selection
       if (codeView.selectionSize > 0) {
@@ -95,26 +140,36 @@ CodeViewCompleteWindow : SCViewHolder {
         ^false
       };
 
-      // don't do anything if the token is the same
-      if (token == lastToken) {
-        ^false;
-      };
-      lastToken = token;
-
+      // complete classes
       if (type == \class) {
         this.showCompletions;
+
         complete = Class.allClasses.detect({ |class| class.name == token.asSymbol }).notNil;
+
         view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
           class.name.asString.beginsWith(token);
         }).collect({ |item|
-          item.name;
+          listActions = listActions.add({ this.complete(item.name, start, token.size) });
+          "   " ++ item.name;
         });
+
+        selectionOffset = 1;
+        if (complete) {
+          completed = 0;
+        };
+        this.select(0);
+
         ^true;
       };
 
+      // complete environment vars in currentEnvironment
       if (type == \envvar || (str[pos] == $~)) {
         this.showCompletions;
-        items = [token ++ " ...", "In currentEnvironment:"];
+
+        complete = currentEnvironment.keys.detect({ |item| item.asString == token[1..] }).notNil;
+
+        items = [token ++ if (complete) { "" } { " ..." }, "In currentEnvironment:"];
+        listActions = listActions.add(nil); // extra line...
 
         currentEnvironment.keys.asArray.select({ |item|
           if (token.size > 1) {
@@ -123,59 +178,98 @@ CodeViewCompleteWindow : SCViewHolder {
             true
           };
         }).sort.do { |envvar|
+          listActions = listActions.add({ this.complete("~" ++ envvar, start, token.size) });
           items = items.add("   ~" ++ envvar ++ " -> " ++ currentEnvironment[envvar].asString);
         };
 
         view.items = items;
+        selectionOffset = 2;
+        if (complete) {
+          completed = 0;
+        };
+        this.select(0);
+
         ^true;
       };
 
+      // complete methods on known classes
       if ((type == \method || (str[pos] == $.)) && [\class, \envvar, \keyword, \number, \symbol, \string].indexOf(prevtype).notNil) {
         this.showCompletions;
+
         class = prevtoken.interpret.class;
+        complete = class.findRespondingMethodFor(token.asSymbol).notNil;
         class = [class] ++ class.superclasses;
-        view.items = [class[0].name ++ ":" ++ if (token == "" || (token == ".")) { "" } { token }  ++ " ..."] ++ class.collect({ |item| item.methods ?? [] }).flat.select({ |method|
-          if (token.size == 0 || (token == ".")) { true } {
+
+        if (token == ".") {
+          token = "";
+          start = start + 1;
+        };
+
+        view.items = [class[0].name ++ ":" ++ token  ++ if (complete) { "" } { " ..." }] ++ class.collect({ |item| item.methods ?? [] }).flat.select({ |method|
+          if (token.size == 0) { true } {
             method.name.asString.beginsWith(token);
           };
-        }).collect({ |item| "   " ++ item.name ++ "(" ++ item.argNames.asArray.join(", ") ++ ")" });
+        }).collect({ |item|
+          listActions = listActions.add({ this.complete(item.name, start, token.size) });
+          if (item.ownerClass.name.asString.beginsWith("Meta_")) {
+            "   *"
+          } {
+            "    "
+          } ++ item.name ++ "(" ++ item.argNames.asArray.join(", ") ++ ")"
+        });
+
+        selectionOffset = 1;
+        if (complete) {
+          completed = 0;
+        };
+        this.select(0);
+
         ^true;
       };
 
+      // complete methods on unknown classes
       if ((type == \method)) {
         this.showCompletions;
-        if (token.size > 1) {
-          methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
-            |item| item.name.asString.beginsWith(token)
-          });
+
+        if (token.size > 0) {
+
+          if (token.size < 3) {
+            methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
+              |item| item.name.asString.size < (token.size + 3) && (item.name.asString.beginsWith(token))
+            });
+          } {
+            methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
+              |item| item.name.asString.beginsWith(token)
+            });
+          };
+
           method = methods.collect({ |item|
-            var count = methods.select({ |m| m.name == item.name });
             if (item.ownerClass.name.asString.beginsWith("Meta_")) {
               "   *"
             } {
               "    "
-            } ++ item.name ++ " [" ++ if (count.size == 1) { count[0].ownerClass.name } { count.size } ++ "]";
+            } ++ item.name;
           }).asSet.asArray.sort({ |a, b| a[4..] < b[4..] });
-          view.items = ["." ++ token ++ " ..."] ++ method;
-        } {
-          if (token.size == 1) {
-            methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
-              |item| item.name.asString.size < 4 && (item.name.asString.beginsWith(token))
-            });
-            method = methods.collect({ |item|
-              var count = methods.select({ |m| m.name == item.name });
-              if (item.ownerClass.name.asString.beginsWith("Meta_")) {
-                "   *"
-              } {
-                "    "
-              } ++ item.name ++ " [" ++ if (count.size == 1) { count[0].ownerClass.name } { count.size } ++ "]";
-            }).asSet.asArray.sort({ |a, b| a[4..] < b[4..] });
-            view.items = ["." ++ token ++ " ..."] ++ method;
-          } {
-            view.items = ["." ++ token ++ " ..."];
-          }
+
+          method = method.collect { |item|
+            var count = methods.select({ |m| m.name == item[4..].asSymbol });
+
+            if (item[4..] == token) { complete = true };
+
+            listActions = listActions.add({ this.complete(item[4..], start, token.size) });
+            item ++ " [" ++ if (count.size == 1) { count[0].ownerClass.name } { count.size } ++ "]";
+          };
+
+          view.items = ["." ++ token ++ if (complete) { "" } { " ..." }] ++ method;
+
+          selectionOffset = 1;
+          if (complete) {
+            completed = 0;
+          };
+          this.select(0);
+
+          ^true;
         };
-        ^true;
       };
 
       while { (pos >= 0) && (braceCount < 1) } {
@@ -186,10 +280,11 @@ CodeViewCompleteWindow : SCViewHolder {
       };
 
       if (braceCount == 1) {
-        token = codeView.getTokenAtCursor(true, pos);
+        token = codeView.getTokenAtCursor(true, pos, getStart:true);
         type = token[1];
-        prevtoken = token[2];
-        prevtype = token[3];
+        start = token[2];
+        prevtoken = token[3];
+        prevtype = token[4];
         token = token[0];
 
         if (type == \class) {

@@ -3,7 +3,7 @@ CodeView : SCViewHolder {
   var <palette, <colorScheme, <tokens;
   var <customTokens, <customColors;
   var <>modKeyHandler, <>keyUpAction;
-  var paste;
+  var paste, suppressKeyPress = false;
 
   *new { |parent, bounds|
     ^super.new.init(parent, bounds);
@@ -49,14 +49,17 @@ CodeView : SCViewHolder {
       if (char.ascii == 27) {
         this.changed(\escapePressed);
       } {
-        this.changed(\keyPressed);
+        if (suppressKeyPress.not) { this.changed(\keyPressed) };
       };
       if (paste.notNil) {
         pasteSize = view.string.size - paste[\stringSize];
         this.colorize(false, paste[\start], paste[\start] + pasteSize);
+        this.changed(\textInserted, paste[\start], pasteSize);
         paste = nil;
       };
       keyUpAction.(view, char, mod, unicode, keycode, key);
+
+      suppressKeyPress = false;
     });
 
     this.font_(Font.monospace);
@@ -399,7 +402,7 @@ CodeView : SCViewHolder {
     };
   }
 
-  getTokenAtCursor { |getPrevToken = false, cursorOverride|
+  getTokenAtCursor { |getPrevToken = false, cursorOverride, getStart = false|
     var str = view.string;
     var selectionStart = cursorOverride ?? max(view.selectionStart - 1, 0);
     var token, type, start;
@@ -428,7 +431,12 @@ CodeView : SCViewHolder {
 
       var item = str.findRegexp(regexp, 0).select({ |item|
         var itemStart = item[0], itemEnd = item[0] + item[1].size;
-        (selectionStart >= itemStart) && (selectionStart < itemEnd) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
+
+        var itemString = item[1], strippedString = item[1].stripWhiteSpace;
+
+        (selectionStart >= itemStart) && (selectionStart < itemEnd)
+        && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]))
+        && (itemString == strippedString);
       })[0];
 
       if (item.notNil) {
@@ -478,7 +486,7 @@ CodeView : SCViewHolder {
 
     // get previous token if necessary
     if (getPrevToken) {
-      prevToken = this.getTokenAtCursor(false, start - 1);
+      prevToken = this.getTokenAtCursor(false, start - 1, getStart);
     };
 
     // take . out of method name
@@ -487,7 +495,13 @@ CodeView : SCViewHolder {
       token = token[1..];
     };
 
-    ^([token.asString.stripWhiteSpace, type] ++ prevToken);
+    ^([token.asString, type] ++ if (getStart) { start } { [] } ++ prevToken);
+  }
+
+  setString { |aString, start, size|
+    view.setString(aString, start, size);
+    this.colorize(false, start - 1, start + aString.size + 2);
+    this.changed(\textInserted, start, aString.size);
   }
 
   interpret { |toInterpret|
@@ -702,6 +716,36 @@ CodeView : SCViewHolder {
 
     if (key == 86 && mod.isCmd) { // paste
       paste = (start: selectionStart, stringSize: view.string.size - selectionSize);
+    };
+
+    if (key == 16777235 && mod.isCmd) { // cmd-up
+      this.changed(\cmdup);
+      suppressKeyPress = true;
+      ^true;
+    };
+
+    if (key == 16777237 && mod.isCmd) { // cmd-down
+      this.changed(\cmddown);
+      suppressKeyPress = true;
+      ^true;
+    };
+
+    if (key == 16777234 && mod.isCmd) { // cmd-left
+      this.changed(\cmdleft);
+      suppressKeyPress = true;
+      ^true;
+    };
+
+    if (key == 16777236 && mod.isCmd) { // cmd-right
+      this.changed(\cmdright);
+      suppressKeyPress = true;
+      ^true;
+    };
+
+    if (key == 32 && mod.isShift) { // shift-space
+      this.changed(\shiftspace);
+      suppressKeyPress = true;
+      ^true;
     };
 
     // don't handle modifiers or escape...
