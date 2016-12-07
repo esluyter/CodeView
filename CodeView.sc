@@ -89,6 +89,7 @@ CodeView : SCViewHolder {
 
     view.palette = palette;
     this.colorize;
+    this.changed(\colorScheme);
   }
 
   oneLightColorScheme {

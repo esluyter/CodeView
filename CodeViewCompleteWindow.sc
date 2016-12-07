@@ -34,14 +34,13 @@ CodeViewCompleteWindow : SCViewHolder {
 
     view = ListView(win, bounds.copy.origin_(0@0))
     .resize_(5)
-    .palette_(codeView.palette)
-    .font_(codeView.font)
-    .background_(codeView.palette.base.alpha_(0.9))
     .action_({
       listActions[view.value].();
       //codeViewParentWindow.front;
       codeView.focus;
     });
+
+    this.makeStyle;
   }
 
   visible {
@@ -94,7 +93,18 @@ CodeViewCompleteWindow : SCViewHolder {
     view.colors = colors;
   }
 
+  makeStyle {
+    view.palette_(codeView.palette)
+    .font_(codeView.font)
+    .background_(codeView.palette.base.alpha_(0.9));
+  }
+
   update { |obj, what|
+    if (what == \colorScheme) {
+      this.makeStyle;
+      ^false;
+    };
+
     if (what == \escapePressed) {
       this.forceHideCompletions;
       ^false;
