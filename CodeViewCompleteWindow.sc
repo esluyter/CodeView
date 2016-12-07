@@ -96,7 +96,9 @@ CodeViewCompleteWindow : SCViewHolder {
   makeStyle {
     view.palette_(codeView.palette)
     .font_(codeView.font)
-    .background_(codeView.palette.base.alpha_(0.9));
+    .background_(codeView.palette.base.alpha_(0.9))
+    .selectedStringColor_(Color.gray(codeView.palette.baseText.asHSV[2].round))
+    .hiliteColor_(codeView.palette.base.blend(codeView.palette.base.complementary, 0.2));
   }
 
   update { |obj, what|
