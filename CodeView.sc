@@ -683,7 +683,7 @@ CodeView : SCViewHolder {
     };
 
     // Delete matching character or tab, if necessary
-    if (key == 16777219) { // backspace
+    if (key == 16777219 && mod.isCmd.not) { // backspace
       if (selectionSize == 0) {
         toDelete = view.string[selectionStart - 1];
         nextChar = view.string[selectionStart];
@@ -832,36 +832,36 @@ CodeView : SCViewHolder {
       paste = (start: selectionStart, stringSize: view.string.size - selectionSize);
     };
 
-    if (key == 90 && mod.isCmd) { // undo cmd-z
+    if (key == 90 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // undo cmd-z
       this.undo;
       ^true;
     };
-    if (key == 89 && mod.isCmd) { // redo cmd-y
+    if (key == 89 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // redo cmd-y
       this.redo;
       ^true;
     };
 
-    if (key == 16777235 && mod.isCmd) { // cmd-up
+    if (key == 16777235 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // cmd-up
       this.changed(\cmdup);
       ^true;
     };
 
-    if (key == 16777237 && mod.isCmd) { // cmd-down
+    if (key == 16777237 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // cmd-down
       this.changed(\cmddown);
       ^true;
     };
 
-    if (key == 16777234 && mod.isCmd) { // cmd-left
+    if (key == 16777234 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // cmd-left
       this.changed(\cmdleft);
       ^true;
     };
 
-    if (key == 16777236 && mod.isCmd) { // cmd-right
+    if (key == 16777236 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // cmd-right
       this.changed(\cmdright);
       ^true;
     };
 
-    if (key == 32 && mod.isShift) { // shift-space
+    if (key == 32 && mod.isShift && mod.isAlt.not && mod.isCmd.not) { // shift-space
       this.changed(\shiftspace);
       ^true;
     };
