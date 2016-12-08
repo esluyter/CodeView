@@ -277,6 +277,13 @@ CodeView : SCViewHolder {
     ^true;
   }
 
+  editable {
+    ^view.editable;
+  }
+  editable_ { |bool|
+    view.editable_(bool);
+  }
+
   /* -------- PRIVATE ----------- */
   colorize { |wholething = true, proposedStart, proposedEnd|
     var start, end, foundEnd = false;
