@@ -52,7 +52,7 @@ CodeView : SCViewHolder {
       if (char.ascii == 27) {
         this.changed(\escapePressed);
       } {
-        //if (suppressKeyPress.not) { this.changed(\keyPressed) };
+        if (suppressKeyPress.not) { this.changed(\keyPressed) };
       };
       if (paste.notNil) {
         pasteSize = view.string.size - paste[\stringSize];
@@ -61,8 +61,6 @@ CodeView : SCViewHolder {
         paste = nil;
       };
       keyUpAction.(view, char, mod, unicode, keycode, key);
-
-      suppressKeyPress = false;
     });
 
     this.font_(Font.monospace);
@@ -651,6 +649,8 @@ CodeView : SCViewHolder {
 
     if (debug) { ["view", view, "char", char, "mod", mod, "unicode", unicode, "keycode", keycode, "key", key].postcs; };
 
+    suppressKeyPress = false;
+
     // Add matching character if necessary, or refrain from doubling
     matchChars.do { |arr|
       var beginChar = arr[0], endChar = arr[1];
@@ -773,6 +773,8 @@ CodeView : SCViewHolder {
       ^true;
     };
 
+    suppressKeyPress = true;
+
     // cmd-D look up documentation
     if ((key == 68) && (mod.isCmd)) {
       if (selectionSize != 0) {
@@ -834,37 +836,33 @@ CodeView : SCViewHolder {
 
     if (key == 16777235 && mod.isCmd) { // cmd-up
       this.changed(\cmdup);
-      suppressKeyPress = true;
       ^true;
     };
 
     if (key == 16777237 && mod.isCmd) { // cmd-down
       this.changed(\cmddown);
-      suppressKeyPress = true;
       ^true;
     };
 
     if (key == 16777234 && mod.isCmd) { // cmd-left
       this.changed(\cmdleft);
-      suppressKeyPress = true;
       ^true;
     };
 
     if (key == 16777236 && mod.isCmd) { // cmd-right
       this.changed(\cmdright);
-      suppressKeyPress = true;
       ^true;
     };
 
     if (key == 32 && mod.isShift) { // shift-space
       this.changed(\shiftspace);
-      suppressKeyPress = true;
       ^true;
     };
 
     // don't handle modifiers or escape...
     if ((char.ascii < 32)) {
-      this.changed(\keyPressed)
+      //this.changed(\keyPressed)
+      suppressKeyPress = false;
       ^modKeyHandler.(view, char, mod, unicode, keycode, key);
     };
 

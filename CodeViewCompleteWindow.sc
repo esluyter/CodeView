@@ -77,8 +77,9 @@ CodeViewCompleteWindow : SCViewHolder {
     win.bounds = win.bounds.height_(1).top_(win.bounds.top + height - 1);
   }
 
-  complete { |string, start, size|
+  complete { |string, start, size, cursorOffset = 0|
     codeView.setString(string, start, size);
+    codeView.select(start + string.size + cursorOffset, 0);
   }
 
   select { |index|
@@ -152,26 +153,50 @@ CodeViewCompleteWindow : SCViewHolder {
         ^false
       };
 
-      // complete classes
-      if (type == \class) {
-        this.showCompletions;
+      // complete string path names
+      if (type == \string) {
+        var str = token.reverse[1..].reverse[1..]; // remove quotes
+        var path = PathName(str).pathOnly;
+        var fileName, rawPath, rawPathUp;
 
-        complete = Class.allClasses.detect({ |class| class.name == token.asSymbol }).notNil;
+        if (File.exists(path)) {
+          this.showCompletions;
+          path = PathName(path);
+          fileName = PathName(str).fileName;
+          rawPath = str.findRegexp(".*\\/")[0][1];
+          try {
+            rawPathUp = str.findRegexp("(.*\\/).*?\\/")[1][1];
+          } {
+            rawPathUp = "/" ++ path.allFolders.asArray.reverse[1..].reverse.join("/");
+          };
 
-        view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
-          class.name.asString.beginsWith(token);
-        }).collect({ |item|
-          listActions = listActions.add({ this.complete(item.name, start, token.size) });
-          "   " ++ item.name;
-        });
+          listActions = listActions ++ [
+            { this.complete("\"" ++ rawPath ++ "\"", start, token.size, -1) },
+            { this.complete("\"" ++ rawPathUp ++ "\"", start, token.size, -1) }
+          ];
 
-        selectionOffset = 1;
-        if (complete) {
-          completed = 0;
+          view.items = [token ++ " ...", ".", ".."]
+          ++
+          path.folders.select({ |folderpath|
+            if (fileName == "") { true } { folderpath.folderName.beginsWith(fileName) };
+          }).collect({ |folderpath|
+            listActions = listActions.add({ this.complete("\"" ++ rawPath ++ folderpath.folderName ++ "/\"", start, token.size, -1) });
+            folderpath.folderName ++ "/"
+          })
+          ++
+          path.files.select({ |filepath|
+            if (fileName == "") { true } { filepath.fileName.beginsWith(fileName) };
+          }).collect({ |filepath|
+            listActions = listActions.add({ this.complete("\"" ++ rawPath ++ filepath.fileName ++ "\"", start, token.size, -1) });
+            filepath.fileName
+          });
+
+          selectionOffset = 1;
+          this.select(2);
+
+          ^true;
         };
-        this.select(0);
-
-        ^true;
+        ^false;
       };
 
       // complete environment vars in currentEnvironment
@@ -204,6 +229,28 @@ CodeViewCompleteWindow : SCViewHolder {
         ^true;
       };
 
+      // complete classes
+      if (type == \class) {
+        this.showCompletions;
+
+        complete = Class.allClasses.detect({ |class| class.name == token.asSymbol }).notNil;
+
+        view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
+          class.name.asString.beginsWith(token);
+        }).collect({ |item|
+          listActions = listActions.add({ this.complete(item.name, start, token.size) });
+          "   " ++ item.name;
+        });
+
+        selectionOffset = 1;
+        if (complete) {
+          completed = 0;
+        };
+        this.select(0);
+
+        ^true;
+      };
+
       // complete methods on known classes
       if ((type == \method || (str[pos] == $.)) && [\class, \envvar, \keyword, \number, \symbol, \string].indexOf(prevtype).notNil) {
         this.showCompletions;
@@ -227,7 +274,7 @@ CodeViewCompleteWindow : SCViewHolder {
             "   *"
           } {
             "    "
-          } ++ item.name ++ "(" ++ item.argNames.asArray.join(", ") ++ ")"
+          } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")"
         });
 
         selectionOffset = 1;
