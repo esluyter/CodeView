@@ -20,6 +20,9 @@ CodeViewCompleteWindow : SCViewHolder {
     .toFrontAction_({
       toFrontAction.();
       isFront = true;
+      if (codeViewParentWindow.notNil) {
+        codeViewParentWindow.visible_(false).front; // hack to avoid stealing focus
+      };
     })
     .endFrontAction_({
       endFrontAction.();
