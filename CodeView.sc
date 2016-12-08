@@ -3,7 +3,7 @@ CodeView : SCViewHolder {
   var <palette, <colorScheme, <tokens;
   var <customTokens, <customColors;
   var <>modKeyHandler, <>keyUpAction;
-  var paste, suppressKeyPress = false;
+  var paste, suppressKeyPress = false, undoHistory, redoHistory;
   var <>interpretArgs;
 
   *new { |parent, bounds|
@@ -12,6 +12,8 @@ CodeView : SCViewHolder {
 
   init { |argparent, argbounds|
     parent = argparent;
+
+    this.resetHistory;
 
     matchChars = [
       [$", $"],
@@ -50,7 +52,7 @@ CodeView : SCViewHolder {
       if (char.ascii == 27) {
         this.changed(\escapePressed);
       } {
-        if (suppressKeyPress.not) { this.changed(\keyPressed) };
+        //if (suppressKeyPress.not) { this.changed(\keyPressed) };
       };
       if (paste.notNil) {
         pasteSize = view.string.size - paste[\stringSize];
@@ -203,9 +205,83 @@ CodeView : SCViewHolder {
     ^view.selectionSize;
   }
 
+  resetHistory {
+    undoHistory = [];
+    redoHistory = [];
+  }
+  undo {
+    var string, start, size, oldstring, item, isWordChar = true, isDelete, prevstart, prevstring;
+    item = undoHistory.pop;
+    if (item.isNil) { ^false };
+
+    #string, start, size, oldstring = item;
+    prevstart = start;
+    isDelete = string.size == 0;
+
+    // undo to previous non-wordchar
+    while {isWordChar || isDelete} {
+      redoHistory = redoHistory.add([string, start, size, oldstring]); // add this to redo history
+      this.setString(oldstring, start, string.size, false); // don't add this to the history
+      view.select(start + size, 0);
+
+      prevstart = start;
+      prevstring = string;
+
+      item = undoHistory.pop;
+      if (item.isNil) { ^false };
+
+      #string, start, size, oldstring = item;
+      isWordChar = (string.size == 1 && "\\w".matchRegexp(string)
+        && ((prevstart - start).abs < 2) && "\\w".matchRegexp(prevstring));
+      isDelete = isDelete && (string.size == 0);
+    };
+
+    if ((prevstart - start).abs < 2 && (string.size == 1 && "\\s".matchRegexp(string))) { // undo immediately preceding space
+      redoHistory = redoHistory.add([string, start, size, oldstring]); // add this to redo history
+      this.setString(oldstring, start, string.size, false); // don't add this to the history
+      view.select(start, 0);
+    } { // otherwise, don't undo
+      undoHistory = undoHistory.add([string, start, size, oldstring]); // add unused back to undo history
+    };
+
+    ^true;
+  }
+  redo {
+    var string, start, size, oldstring, item, isWordChar = true, isDelete, prevstart, prevstring;
+
+    item = redoHistory.pop;
+    if (item.isNil) { ^false };
+
+    #string, start, size, oldstring = item;
+    prevstart = start;
+    isDelete = string.size == 0;
+
+    // undo to previous non-wordchar
+    while {isWordChar || isDelete} {
+      undoHistory = undoHistory.add([string, start, size, oldstring]); // add this back to undo history
+      this.setString(string, start, size, false); // don't add this to the history
+      view.select(start + string.size, 0);
+
+      prevstart = start;
+      prevstring = string;
+
+      item = redoHistory.pop;
+      if (item.isNil) { ^false };
+
+      #string, start, size, oldstring = item;
+      isWordChar = (string.size == 1 && "\\w".matchRegexp(string)
+        && ((prevstart - start).abs < 2) && "\\w|\\s".matchRegexp(prevstring));
+      isDelete = isDelete && (string.size == 0);
+    };
+
+    redoHistory = redoHistory.add([string, start, size, oldstring]); // add unused back to redo history
+
+    ^true;
+  }
+
   /* -------- PRIVATE ----------- */
   colorize { |wholething = true, proposedStart, proposedEnd|
-    var start, end;
+    var start, end, foundEnd = false;
 
     if (view.string.size == 0) {
       ^false; // can't colorize nothing
@@ -214,21 +290,25 @@ CodeView : SCViewHolder {
     // set prelim start & end
     if (wholething) {
       proposedStart = 0; proposedEnd = view.string.size;
-    };
+    } {
+      proposedStart = proposedStart ?? view.selectionStart;
+      proposedEnd = proposedEnd ?? (view.selectionStart + view.selectionSize);
 
-    // if both are nil, take line break
-    if (proposedStart.isNil && proposedEnd.isNil) {
+      // expand to line break
       ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
         if (linebreak < view.selectionStart) {
           proposedStart = linebreak;
         } {
-          if (proposedEnd.isNil) { proposedEnd = linebreak };
+          if (foundEnd.not && (linebreak > proposedEnd)) {
+            proposedEnd = linebreak;
+            foundEnd = true;
+          };
         };
       };
     };
 
-    start = proposedStart ?? 0;
-    end = proposedEnd ?? view.string.size;
+    start = proposedStart;
+    end = proposedEnd;
 
     // extend boundary for long tokens
     [\longComment, \string, \symbol].do { |thing|
@@ -330,7 +410,7 @@ CodeView : SCViewHolder {
   }
 
   indentAt { |lineStart|
-    view.setString(String.newFrom($ .dup(tabWidth)), lineStart, 0);
+    this.setString(String.newFrom($ .dup(tabWidth)), lineStart, 0);
     ^tabWidth;
   }
 
@@ -340,10 +420,10 @@ CodeView : SCViewHolder {
 
     if (currentIndentSpaces > 0) {
       if (currentTabOffset == 0) {
-        view.setString("", lineStart, tabWidth);
+        this.setString("", lineStart, tabWidth);
         ^(0 - tabWidth);
       } {
-        view.setString("", lineStart, currentTabOffset);
+        this.setString("", lineStart, currentTabOffset);
         ^(0 - currentTabOffset);
       };
     } {
@@ -500,9 +580,10 @@ CodeView : SCViewHolder {
     ^([token.asString, type] ++ if (getStart) { start } { [] } ++ prevToken);
   }
 
-  setString { |aString, start, size|
+  setString { |aString, start, size, addToHistory = true|
+    if (addToHistory) { this.addToHistory(aString, start, size) };
     view.setString(aString, start, size);
-    this.colorize(false, start - 1, start + aString.size + 2);
+    this.colorize(false, start, start + aString.size);
     this.changed(\textInserted, start, aString.size);
   }
 
@@ -527,6 +608,15 @@ CodeView : SCViewHolder {
     } { |error|
       error.reportError;
     };
+  }
+
+  addToHistory { |string, start, size|
+    var oldstring = "";
+    if (size > 0) {
+      oldstring = view.string[start..(start + size - 1)];
+    };
+    undoHistory = undoHistory.add([string, start, size, oldstring]);
+    redoHistory = [];
   }
 
   handleKey { |view, char, mod, unicode, keycode, key|
@@ -575,7 +665,7 @@ CodeView : SCViewHolder {
       // match chars
       if (char == beginChar) {
         if (selectionSize == 0) {
-          view.setString(beginChar ++ endChar, selectionStart, 0);
+          this.setString(beginChar ++ endChar, selectionStart, 0);
         } {
           view.selectedString = beginChar ++ view.selectedString ++ endChar;
         };
@@ -599,17 +689,17 @@ CodeView : SCViewHolder {
         matchChars.do { |arr|
           var beginChar = arr[0], endChar = arr[1];
           if ((toDelete == beginChar) && (nextChar == endChar)) {
-            view.setString("", selectionStart - 1, 2);
+            this.setString("", selectionStart - 1, 2);
             ^true;
           };
         };
 
-        view.setString("", selectionStart - 1, 1);
+        this.setString("", selectionStart - 1, 1);
         this.colorize(false);
         ^true;
       };
 
-      view.setString("", selectionStart, selectionSize);
+      this.setString("", selectionStart, selectionSize);
       this.colorize(false);
       ^true;
     };
@@ -674,10 +764,10 @@ CodeView : SCViewHolder {
       } { // ...otherwise insert newline with correct indent
         # runningOffset, extraNewLine = this.braceBalance(lineToCursor, stringForward[0]); // add or subtract from total indent
         if (extraNewLine) {
-          view.setString("\n" ++ String.newFrom($ .dup(currentIndentSpaces)), selectionStart, selectionSize);
+          this.setString("\n" ++ String.newFrom($ .dup(currentIndentSpaces)), selectionStart, selectionSize);
           view.select(selectionStart, 0);
         };
-        view.setString("\n" ++ String.newFrom($ .dup(max(currentIndentSpaces + runningOffset, 0))), selectionStart, selectionSize);
+        this.setString("\n" ++ String.newFrom($ .dup(max(currentIndentSpaces + runningOffset, 0))), selectionStart, selectionSize);
       };
 
       ^true;
@@ -733,6 +823,15 @@ CodeView : SCViewHolder {
       paste = (start: selectionStart, stringSize: view.string.size - selectionSize);
     };
 
+    if (key == 90 && mod.isCmd) { // undo cmd-z
+      this.undo;
+      ^true;
+    };
+    if (key == 89 && mod.isCmd) { // redo cmd-y
+      this.redo;
+      ^true;
+    };
+
     if (key == 16777235 && mod.isCmd) { // cmd-up
       this.changed(\cmdup);
       suppressKeyPress = true;
@@ -765,11 +864,12 @@ CodeView : SCViewHolder {
 
     // don't handle modifiers or escape...
     if ((char.ascii < 32)) {
+      this.changed(\keyPressed)
       ^modKeyHandler.(view, char, mod, unicode, keycode, key);
     };
 
     // ...otherwise insert character
-    view.setString(char.asString, selectionStart, selectionSize);
+    this.setString(char.asString, selectionStart, selectionSize);
     this.colorize(false);
     ^true;
   }
