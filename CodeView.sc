@@ -593,7 +593,7 @@ CodeView : SCViewHolder {
   }
 
   interpret { |toInterpret|
-    var argNames = "", argValues = [];
+    var argNames = "", argValues = [], compiledFunc;
 
     if (toInterpret.stripWhiteSpace == "") { ^false };
 
@@ -609,9 +609,17 @@ CodeView : SCViewHolder {
     toInterpret = "{ " ++ argNames ++ "\n" ++ toInterpret ++ "\n}";
 
     try {
-      ("-> " ++ toInterpret.interpret.valueArray(argValues)).postln;
+      compiledFunc = toInterpret.interpret;
+      if (compiledFunc.isNil) {
+        PostView.postln("ERROR: Compile error. See IDE post window for details.");
+        ^false;
+      };
+
+      ("-> " ++ compiledFunc.valueArray(argValues)).postln;
+      ^true;
     } { |error|
       error.reportError;
+      ^false;
     };
   }
 
