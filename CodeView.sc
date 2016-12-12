@@ -824,7 +824,11 @@ CodeView : SCViewHolder {
           ^true;
         };
 
-        if ([\number, \symbol, \string].indexOf(currentToken[1]).notNil) {
+        if (currentToken[1] == \string) {
+          HelpBrowser.openHelpFor("String");
+        };
+
+        if ([\number, \symbol/*, \string*/].indexOf(currentToken[1]).notNil) {
           HelpBrowser.goTo(SCDoc.helpTargetUrl +/+ "Reference/Literals.html#" ++ currentToken[1].asString.capitalize ++ "s");
           ^true;
         };
@@ -871,6 +875,60 @@ CodeView : SCViewHolder {
 
     if (key == 32 && mod.isShift && mod.isAlt.not && mod.isCmd.not) { // shift-space
       this.changed(\shiftspace);
+      ^true;
+    };
+
+    if (key == 66 && mod.isCmd && mod.isAlt.not) { // cmd-B
+      if (mod.isShift) {
+        Server.default.reboot;
+        ^true;
+      };
+      Server.default.boot;
+      ^true;
+    };
+
+    if (key == 75 && mod.isCmd && mod.isShift.not && mod.isAlt.not) { // cmd-K
+      Server.default.quit;
+      ^true;
+    };
+
+    if (key == 76 && mod.isCmd && mod.isShift && mod.isAlt.not) { // shift-cmd-L
+      // Maybe add some sort of hook here? to confirm whether or not to recompile?
+      // risk of losing unsaved changes....
+      thisProcess.recompile;
+      ^true;
+    };
+
+    if (key == 80 && mod.isCmd && mod.isShift && mod.isAlt.not) { // shift-cmd-P
+      this.changed(\clearPost);
+      ^true;
+    };
+
+    if (key == 77 && mod.isCmd && (mod.isShift && mod.isAlt).not) { // cmd-M
+      if (mod.isShift) {
+        Server.default.scope;
+        ^true;
+      };
+      if (mod.isAlt) {
+        Server.default.freqscope;
+        ^true;
+      };
+      Server.default.meter;
+      ^true;
+    };
+
+    if (key == 84 && mod.isCmd && (mod.isShift && mod.isAlt).not) { // cmd-T
+      if (mod.isShift) {
+        Server.default.queryAllNodes(true);
+        PostView.postln("WARNING: Server dump only visible in IDE post window. Use alt-cmd-T for graphical view.")
+        ^true
+      };
+      if (mod.isAlt) {
+        Server.default.plotTree;
+        ^true
+      };
+      Server.default.queryAllNodes;
+      PostView.postln("WARNING: Server dump only visible in IDE post window. Use alt-cmd-T for graphical view.")
       ^true;
     };
 

@@ -10,6 +10,9 @@ PostView : SCViewHolder {
   }
 
   *new { |parent, bounds|
+    if (Quarks.isInstalled("ddwStatusBox")) {
+      "Installed quark ddwStatusBox conflicts with PostView extensions to String. Please pick one to use and uninstall the other.".warn;
+    };
     ^super.new.init(parent, bounds);
   }
   init { |argparent, argbounds|
@@ -43,7 +46,8 @@ PostView : SCViewHolder {
     if (firstTime && mute.not) { firstTime = false; this.post("\n") }; // need this to flush it all out
   }
   clear {
-    view.setString("");
+    view.string = "";
+    firstTime = true;
   }
 
   font_ { |afont|

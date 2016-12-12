@@ -83,7 +83,7 @@ CodeViewCompleteWindow : SCViewHolder {
   complete { |string, start, size, cursorOffset = 0|
     string = string.asString;
     codeView.setString(string, start, size);
-    codeView.select((start + string.size + cursorOffset).postln, 0);
+    codeView.select((start + string.size + cursorOffset), 0);
   }
 
   select { |index|
