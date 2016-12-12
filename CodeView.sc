@@ -299,9 +299,11 @@ CodeView : SCViewHolder {
       proposedStart = proposedStart ?? view.selectionStart;
       proposedEnd = proposedEnd ?? (view.selectionStart + view.selectionSize);
 
+      start = proposedStart;
+
       // expand to line break
       ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
-        if (linebreak < view.selectionStart) {
+        if (linebreak < start) {
           proposedStart = linebreak;
         } {
           if (foundEnd.not && (linebreak > proposedEnd)) {
@@ -328,8 +330,6 @@ CodeView : SCViewHolder {
         };
       });
     };
-
-
 
     // reset everything
     view.setStringColor(colorScheme[\text], start, end - start);
@@ -660,7 +660,7 @@ CodeView : SCViewHolder {
     var currentIndent = currentIndentSpaces / tabWidth;
     var lineCodeStart = lineStart + currentIndentSpaces;
 
-    var toDelete, nextChar, runningOffset = 0, extraNewLine, currentToken;
+    var toDelete, nextChar, runningOffset = 0, extraNewLine, currentToken, region, regionStart;
 
     if (debug) { ["view", view, "char", char, "mod", mod, "unicode", unicode, "keycode", keycode, "key", key].postcs; };
 
@@ -728,17 +728,58 @@ CodeView : SCViewHolder {
           this.indentAt(lineStart);
         }
       } {
-        ([0] ++ view.string.findAll($\n).collect(_ + 1)) // all lines..
-        .select(_ >= lineStart).select(_ < lineEnd) //.. between selection
-        .do { |lineStart, i|
-          lineStart = lineStart + runningOffset; // account for previous indents
+        region = view.string.findRegexp(".+?$")
+        .select({ |match| match[0] >= (lineStart - 1) && (match[0]  < lineEnd) });
 
-          runningOffset = runningOffset + if (mod.isShift) {
-            this.deindentAt(lineStart);
-          } {
-            this.indentAt(lineStart);
-          };
+        regionStart = region[0][0];
+        if (region[0][1][0] == $\n) {
+          region[0][1] = region[0][1][1..];
+          regionStart = regionStart + 1;
         };
+
+        region = region.collect({ |match|
+          var line = match[1], currentIndentSpace, currentTabOffset;
+          if (line[0] == $\n) { line = line[1..] };
+          if (mod.isShift) {
+            currentIndentSpaces = line.findRegexpAt("(\\s*)", 0)[1];
+            currentTabOffset = currentIndentSpaces % tabWidth; // the amount off the tab grid the line is
+
+            if (currentIndentSpaces > 0) {
+              if (currentTabOffset == 0) {
+                line = line[tabWidth..];
+              } {
+                line = line[currentTabOffset..];
+              };
+            };
+
+            line;
+          } {
+            String.newFrom($ .dup(tabWidth)) ++ line;
+          };
+        }).join("\n");
+
+        this.setString(region, lineStart, lineEnd - lineStart);
+        this.colorize(false, lineStart, lineStart + region.size);
+        this.select(lineStart, region.size);
+
+        /* -------
+        {
+          ([0] ++ view.string.findAll($\n).collect(_ + 1)) // all lines..
+          .select(_ >= lineStart).select(_ < lineEnd) //.. between selection
+          .do { |lineStart, i|
+            lineStart = lineStart + runningOffset; // account for previous indents
+
+            runningOffset = runningOffset + if (mod.isShift) {
+              this.deindentAt(lineStart);
+            } {
+              this.indentAt(lineStart);
+            };
+
+            if (i % 5 == 4) { 0.01.wait };
+
+          };
+        }.fork(AppClock);
+        */
       };
       ^true;
     };

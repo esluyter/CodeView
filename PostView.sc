@@ -1,5 +1,5 @@
 PostView : SCViewHolder {
-  var <parent, firstTime = true, <colorScheme, <palette, <font, <tokens, <>mute = false;
+  var <parent, firstTime = true, <colorScheme, <palette, <font, <tokens, <>mute = false, prevStr;
   classvar <all;
 
   *post { |str|
@@ -20,7 +20,7 @@ PostView : SCViewHolder {
     all = all.add(this);
 
     tokens = (
-      success: "^\\->\\s.*?$",
+      success: "^\\->\\s.*$",
       warning: "^WARNING:\\s.*?$",
       error: "^ERROR:\\s.*?$"
     );
@@ -39,7 +39,13 @@ PostView : SCViewHolder {
     if (mute) { ^false };
     view.setString(str, start, 0);
     view.select(view.string.size - 1, 0);
-    this.colorize(start, str.size);
+
+    if (prevStr == "WARNING: ") {
+      this.colorize(start - prevStr.size, str.size + prevStr.size);
+    } {
+      this.colorize(start, str.size);
+    };
+    prevStr = str;
   }
   postln { |str|
     this.post(str.asString ++ "\n");
