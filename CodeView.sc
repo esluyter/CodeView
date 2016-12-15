@@ -420,7 +420,7 @@ CodeView : SCViewHolder {
   }
 
   deindentAt { |lineStart|
-    var currentIndentSpaces = view.string.findRegexpAt("(\\s*)", lineStart)[1];
+    var currentIndentSpaces = view.string.findRegexpAt("(\\h*)", lineStart)[1];
     var currentTabOffset = currentIndentSpaces % tabWidth; // the amount off the tab grid the line is
 
     if (currentIndentSpaces > 0) {
@@ -656,7 +656,7 @@ CodeView : SCViewHolder {
     var currentLineEnd = (selectionStart + (stringFromSelectionStart.find($\n) ?? stringFromSelectionStart.size));
     var currentLine = (if ((currentLineEnd - lineStart) == 0) { "" } { view.string[lineStart..(currentLineEnd - 1)] });
 
-    var currentIndentSpaces = currentLine.findRegexpAt("(\\s*)", 0)[1];
+    var currentIndentSpaces = currentLine.findRegexpAt("(\\h*)", 0)[1];
     var currentIndent = currentIndentSpaces / tabWidth;
     var lineCodeStart = lineStart + currentIndentSpaces;
 
