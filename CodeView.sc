@@ -509,6 +509,36 @@ CodeView : SCViewHolder {
         start = item[0];
         token = item[1];
         type = thing;
+
+        // fix method bug returning e.g. "if ("
+        if (type == \method && (token.last == $_ || token.last.isAlphaNum).not) {
+          // strip beginning whitespace
+          while {token[0].isAlphaNum.not} {
+            start = start + 1;
+            token = token[1..];
+          };
+
+          if (selectionStart == (start + token.lastIndex)) { // is cursor on punctuation?
+            if (getPrevToken) {
+              prevToken = [token, type];
+              if (getStart) { prevToken = prevToken.add(start) };
+              prevToken[0] = prevToken[0].findRegexpAt("\\w+")[0];
+            };
+
+            start = start + token.lastIndex;
+            token = token.last.asString;
+            type = \punctuation;
+
+            if (getStart) {
+              ^([token, type, start] ++ prevToken);
+            } {
+              ^([token, type] ++ prevToken);
+            };
+          } {
+            token = "." ++ token.findRegexpAt("\\w+")[0];
+            start = start - 1;
+          };
+        };
       };
     };
 
