@@ -4,6 +4,7 @@ CodeView : SCViewHolder {
   var <customTokens, <customColors;
   var <>modKeyHandler, <>keyUpAction;
   var paste, suppressKeyPress = false, undoHistory, redoHistory;
+  var colorizeRout;
   var <>interpretArgs;
 
   *new { |parent, bounds|
@@ -294,7 +295,21 @@ CodeView : SCViewHolder {
 
     // set prelim start & end
     if (wholething) {
-      proposedStart = 0; proposedEnd = view.string.size;
+      proposedStart = 0; proposedEnd = 0; //proposedEnd = view.string.size;
+
+      colorizeRout.stop;
+      colorizeRout = {
+        0.01.wait;
+        while {proposedEnd < view.string.size} {
+          proposedEnd = min(view.string.size, proposedStart + 500);
+          //[proposedStart, proposedEnd].postln;
+          this.colorize(false, proposedStart, proposedEnd);
+          proposedStart = proposedEnd;
+          0.2.wait;
+        };
+      }.fork(AppClock);
+
+      ^true;
     } {
       proposedStart = proposedStart ?? view.selectionStart;
       proposedEnd = proposedEnd ?? (view.selectionStart + view.selectionSize);

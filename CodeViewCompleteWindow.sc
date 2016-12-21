@@ -128,16 +128,31 @@ CodeViewCompleteWindow : SCViewHolder {
   }
 
   showEnvVarCompletions { |token, start|
-    var complete, items;
+    var complete, items, envir;
 
     this.showCompletions;
 
-    complete = currentEnvironment.keys.detect({ |item| item.asString == token[1..] }).notNil;
+    if (currentEnvironment.isKindOf(Environment)) {
+      envir = currentEnvironment; // for regular Environments
+    };
+    if (currentEnvironment.isKindOf(EnvironmentRedirect)) {
+      envir = currentEnvironment.envir; // for ProxySpaces, etc.
+    };
+    if (envir.isNil) { // if it's something weird just return.
+      this.hideCompletions;
+      ^false;
+    };
+    complete = envir.keys.detect({ |item| item.asString == token[1..] }).notNil;
 
-    items = [token ++ if (complete) { "" } { " ..." }, "In currentEnvironment:"];
+    items = [
+      token ++ if (complete) { "" } { " ..." },
+      "In currentEnvironment ("
+        ++ if (currentEnvironment.class.asString[0].isVowel) { "an " } { "a " }
+        ++ currentEnvironment.class.asString ++ "):"
+    ];
     listActions = listActions.add(nil); // extra line...
 
-    currentEnvironment.keys.asArray.select({ |item|
+    envir.keys.asArray.select({ |item|
       if (token.size > 1) {
         item.asString.beginsWith(token[1..])
       } {
@@ -274,10 +289,24 @@ CodeViewCompleteWindow : SCViewHolder {
 
     this.showCompletions;
     method = class.findRespondingMethodFor(token.asSymbol);
+
+    if (method.isNil) {
+      this.hideCompletions;
+      ^false;
+    };
+
     view.items = if (method.argNames.notNil) {
-      [class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"] ++ (method.argumentString ?? "").split($,).collect({ |item| "   " ++ item.stripWhiteSpace });
+      [
+        class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"
+      ] ++ (method.argumentString ?? "").split($,).collect({ |item|
+        "   " ++ item.stripWhiteSpace
+      });
     } {
-      [class.name ++ ":" ++ token ++ "()", ""];
+      if (method.name.asString.endsWith("_")) {
+        [class.name ++ ":" ++ token ++ "(value)", "   value"]
+      } {
+        [class.name ++ ":" ++ token ++ "()", ""];
+      };
     };
     ^true;
   }
