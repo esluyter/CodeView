@@ -286,64 +286,77 @@ CodeView : SCViewHolder {
   }
 
   /* -------- PRIVATE ----------- */
-  colorize { |wholething = true, proposedStart, proposedEnd|
+  colorize { |wholething = true, proposedStart, proposedEnd, flexibleBounds = true|
     var start, end, foundEnd = false;
+    var lastToken = "", lastTokenStart = 0;
 
     if (view.string.size == 0) {
       ^false; // can't colorize nothing
     };
 
-    // set prelim start & end
-    if (wholething) {
-      proposedStart = 0; proposedEnd = 0; //proposedEnd = view.string.size;
-
-      colorizeRout.stop;
-      colorizeRout = {
-        0.01.wait;
-        while {proposedEnd < view.string.size} {
-          proposedEnd = min(view.string.size, proposedStart + 500);
-          //[proposedStart, proposedEnd].postln;
-          this.colorize(false, proposedStart, proposedEnd);
-          proposedStart = proposedEnd;
-          0.2.wait;
-        };
-      }.fork(AppClock);
-
-      ^true;
-    } {
-      proposedStart = proposedStart ?? view.selectionStart;
-      proposedEnd = proposedEnd ?? (view.selectionStart + view.selectionSize);
-
+    if (flexibleBounds.not) {
       start = proposedStart;
+      end = proposedEnd;
+    } {
+      // set prelim start & end
+      if (wholething) {
+        proposedStart = 0; proposedEnd = 0; //proposedEnd = view.string.size;
 
-      // expand to line break
-      ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
-        if (linebreak < start) {
-          proposedStart = linebreak;
+        colorizeRout.stop;
+        if (view.string.size > 1000) {
+          colorizeRout = {
+            0.01.wait;
+            while {proposedEnd < view.string.size} {
+              proposedEnd = min(view.string.size, proposedStart + 1000);
+              //[proposedStart, proposedEnd].postln;
+              this.colorize(false, proposedStart, proposedEnd, false);
+              proposedStart = proposedEnd;
+              0.3.wait;
+            };
+          }.fork(AppClock);
         } {
-          if (foundEnd.not && (linebreak > proposedEnd)) {
-            proposedEnd = linebreak;
-            foundEnd = true;
+          this.colorize(false, 0, view.string.size);
+        };
+
+        ^true;
+      } {
+        proposedStart = proposedStart ?? view.selectionStart;
+        proposedEnd = proposedEnd ?? (view.selectionStart + view.selectionSize);
+
+        start = proposedStart;
+
+        // expand to line break
+        ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
+          if (linebreak < start) {
+            proposedStart = linebreak;
+          } {
+            if (foundEnd.not && (linebreak > proposedEnd)) {
+              proposedEnd = linebreak;
+              foundEnd = true;
+            };
           };
         };
       };
-    };
 
-    start = proposedStart;
-    end = proposedEnd;
+      start = proposedStart;
+      end = proposedEnd;
 
-    // extend boundary for long tokens
-    [\longComment, \string, \symbol].do { |thing|
-      var regexp = tokens[thing];
+      // extend boundary for long tokens
+      [\longComment, \string, \symbol].do { |thing|
+        var regexp = tokens[thing];
 
-      view.string.findRegexp(regexp, 0).do({ |item|
-        var itemStart = item[0], itemEnd = itemStart + item[1].size;
+        view.string.findRegexp(regexp, 0).do({ |item|
+          var itemStart = item[0], itemEnd = itemStart + item[1].size;
 
-        if ((itemStart <= proposedEnd) && (itemEnd >= proposedStart)) {
-          if (itemStart < start) { start = itemStart };
-          if (itemEnd > end) { end = itemEnd };
-        };
-      });
+          if ((itemStart <= proposedEnd) && (itemEnd >= proposedStart)) {
+            if (itemStart < start) { proposedStart = max(start - 500, itemStart) };
+            if (itemEnd > end) { proposedEnd = min(end + 500, itemEnd) };
+          };
+        });
+      };
+
+      start = proposedStart;
+      end = proposedEnd;
     };
 
     // reset everything
@@ -359,6 +372,9 @@ CodeView : SCViewHolder {
         (item[0] >= start) && (item[0] < end);
       }).do { |result|
         view.setStringColor(color, result[0], result[1].size);
+
+        lastTokenStart = result[0];
+        lastToken = result[1];
       };
     };
 
@@ -370,7 +386,15 @@ CodeView : SCViewHolder {
       view.string.findRegexp(regexp, 0).select({ |item|
         (item[0] >= start) && (item[0] < end) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
       }).do { |result|
-        view.setStringColor(color, result[0], result[1].size);
+        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
+            && lastToken.contains(result[1])) { // and contains this one,
+          // skip it
+        } {
+          view.setStringColor(color, result[0], result[1].size);
+
+          lastTokenStart = result[0];
+          lastToken = result[1];
+        };
       };
     };
 
@@ -384,7 +408,15 @@ CodeView : SCViewHolder {
       }).select({ |item|
         Class.allClasses.detect({ |class| class.name == item[1].asSymbol }).notNil;
       }).do { |result|
-        view.setStringColor(color, result[0], result[1].size);
+        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
+            && lastToken.contains(result[1])) { // and contains this one,
+          // skip it
+        } {
+          view.setStringColor(color, result[0], result[1].size);
+
+          lastTokenStart = result[0];
+          lastToken = result[1];
+        };
       };
     };
 
@@ -394,9 +426,22 @@ CodeView : SCViewHolder {
       var regexp = tokens[thing];
 
       view.string.findRegexp(regexp, 0).select({ |item|
-        (item[0] >= start) && (item[0] < end);
+        ((item[0] >= start) && (item[0] < end))
+          || ((item[0] + item[1].size >= start) && (item[0] + item[1].size < end))
+          || ((item[0] < start) && (item[0] + item[1].size > end));
       }).do { |result|
-        view.setStringColor(color, result[0], result[1].size);
+        var thisSize;
+
+        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
+            && lastToken.contains(result[1])) { // and contains this one,
+          // skip it
+        } {
+          thisSize = min(end, result[0] + result[1].size) - result[0]; // only do the amount in this range
+          view.setStringColor(color, result[0], thisSize);
+
+          lastTokenStart = result[0];
+          lastToken = result[1];
+        };
       };
     };
 
@@ -406,10 +451,23 @@ CodeView : SCViewHolder {
       var regexp = tokens[thing];
 
       view.string.findRegexp(regexp, 0).select({ |item|
-        (item[0] >= start) && (item[0] < end);
+        ((item[0] >= start) && (item[0] < end))
+          || ((item[0] + item[1].size >= start) && (item[0] + item[1].size < end))
+          || ((item[0] < start) && (item[0] + item[1].size > end));
       }).do { |result|
-        view.setStringColor(color, result[0], result[1].size);
-        view.setFont(italicfont, result[0], result[1].size);
+        var thisSize;
+
+        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
+            && lastToken.contains(result[1])) { // and contains this one,
+          // skip it
+        } {
+          thisSize = min(end, result[0] + result[1].size) - result[0]; // only do the amount in this range
+          view.setStringColor(color, result[0], thisSize);
+          view.setFont(italicfont, result[0], thisSize);
+
+          lastTokenStart = result[0];
+          lastToken = result[1];
+        };
       };
     };
 
