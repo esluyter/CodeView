@@ -113,7 +113,7 @@ CodeView : SCViewHolder {
     ));
   }
 
-  lightColorScheme {
+  paperLightColorScheme {
     this.colorScheme_((
       background: Color.new255(255, 252, 240),
       text: Color.new255(9, 3, 0),
@@ -151,7 +151,7 @@ CodeView : SCViewHolder {
     ));
   }
 
-  darkColorScheme {
+  brightDarkColorScheme {
     this.colorScheme_((
       background: Color(0.18, 0.21, 0.25),
       text: Color.gray(0.85),
