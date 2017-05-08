@@ -25,7 +25,7 @@ CodeView : SCViewHolder {
     ];
 
     tokens = (
-      keyword: "var|arg|this|true|false|currentEnvironment|topEnvironment|thisProcess|thisThread|thisFunction",
+      keyword: "var|arg|this|true|false|currentEnvironment|topEnvironment|thisProcess|thisThread|thisFunction|thisCueList",
       envvar: "\\~\\w+",
       class: "[A-Z]\\w*",
       method: "\\.[a-z_]\\w*|\\W[a-z_]\\w+\\s*(\\(|\\{)",
