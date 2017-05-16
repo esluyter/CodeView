@@ -183,8 +183,10 @@ CodeViewCompleteWindow : SCViewHolder {
     view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
       class.name.asString.beginsWith(token);
     }).collect({ |item|
+      var helpClass = item.name;
+      var helpText = SCDoc.documents["Classes/" ++ helpClass].summary;
       listActions = listActions.add({ this.complete(item.name, start, token.size) });
-      "   " ++ item.name;
+      "   " ++ item.name ++ " - " ++ helpText;
     });
 
     selectionOffset = 1;
@@ -209,14 +211,20 @@ CodeViewCompleteWindow : SCViewHolder {
         method.name.asString.beginsWith(token);
       };
     }).collect({ |item|
+      var classMethod = item.ownerClass.name.asString.beginsWith("Meta_");
+      var helpClass = if (classMethod) { item.ownerClass.name.asString[5..] } { item.ownerClass.name.asString };
+      var helpMethod = (if (classMethod) { "*" } { "-" }) ++ item.name;
+      var helpText = try { if (SCDoc.documents["Classes/" ++ helpClass].makeMethodList.collect(_.asSymbol).includes(("_" ++ helpMethod).asSymbol)) { SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE).children.collect(_.text).join } };
+
       listActions = listActions.add({ // TODO : figure out why this doesn't show method completions right away
+
         this.complete(item.name ++ "()", start, token.size, -1);
       });
       if (item.ownerClass.name.asString.beginsWith("Meta_")) {
         "   *"
       } {
         "    "
-      } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")"
+      } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
     });
 
     selectionOffset = 1;
@@ -260,7 +268,15 @@ CodeViewCompleteWindow : SCViewHolder {
       listActions = listActions.add({ // TODO : figure out why this doesn't open up completions for method
         this.complete(item[4..] ++ "()", start, token.size, -1)
       });
-      item ++ " [" ++ if (count.size == 1) { count[0].ownerClass.name } { count.size } ++ "]";
+      item ++ " [" ++ if (count.size == 1) {
+        var method = count[0];
+        var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
+        var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
+        var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
+        var helpText = try { if (SCDoc.documents["Classes/" ++ helpClass].makeMethodList.collect(_.asSymbol).includes(("_" ++ helpMethod).asSymbol)) { SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE).children.collect(_.text).join } };
+
+        method.ownerClass.name  ++ "]" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
+      } { "(" ++ count.size.asString ++ "): " ++ count.collect({ |item| item.ownerClass.name.asString }).join(", ") ++ "]" };
     };
 
     view.items = ["." ++ token ++ if (complete) { "" } { " ..." }] ++ method;
@@ -273,11 +289,14 @@ CodeViewCompleteWindow : SCViewHolder {
 
   showClassNewArguments { |token|
     var method;
+    var helpClass = token;
+    var helpText = SCDoc.documents["Classes/" ++ helpClass].summary;
 
     this.showCompletions;
     method = token.asSymbol.asClass.class.findRespondingMethodFor(\new);
     view.items = [
-      token ++ "(" ++ method.argNames[1..].join(", ") ++ ")"
+      token ++ "(" ++ method.argNames[1..].join(", ") ++ ")",
+      helpText
     ] ++ method.argumentString.split($,).collect({ |item|
       "   " ++ item.stripWhiteSpace
     });
@@ -286,6 +305,11 @@ CodeViewCompleteWindow : SCViewHolder {
 
   showMethodArguments { |class, token|
     var method;
+    var classMethod = class.asString.beginsWith("Meta_");
+    var helpClass = if (classMethod) { class.asString[5..] } { class.asString };
+    var helpMethod = if (classMethod) { "*" ++ token } { "-" ++ token };
+    var helpNode = SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE);
+    var helpText = if (helpNode.notNil) { helpNode.children.collect(_.text).join } { SCDoc.documents["Classes/" ++ helpClass].summary };
 
     this.showCompletions;
     method = class.findRespondingMethodFor(token.asSymbol);
@@ -297,7 +321,8 @@ CodeViewCompleteWindow : SCViewHolder {
 
     view.items = if (method.argNames.notNil) {
       [
-        class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"
+        class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")",
+        helpText
       ] ++ (method.argumentString ?? "").split($,).collect({ |item|
         "   " ++ item.stripWhiteSpace
       });
@@ -317,6 +342,11 @@ CodeViewCompleteWindow : SCViewHolder {
     view.items = ["." ++ token] ++ possibleClasses.collect({ |item|
       var method = item.findMethod(token.asSymbol);
 
+      var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
+      var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
+      var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
+      var helpText = try { if (SCDoc.documents["Classes/" ++ helpClass].makeMethodList.collect(_.asSymbol).includes(("_" ++ helpMethod).asSymbol)) { SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE).children.collect(_.text).join } };
+
       listActions = listActions.add({
         var class = method.ownerClass;
         lastSelectedMethod = method.name;
@@ -324,7 +354,7 @@ CodeViewCompleteWindow : SCViewHolder {
         this.showMethodArguments(class, method.name);
       });
 
-      "   " ++ method.asString ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")"
+      "   " ++ method.asString ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
     });
     selectionOffset = 1;
     this.select(0);
@@ -408,7 +438,7 @@ CodeViewCompleteWindow : SCViewHolder {
 
   makeStyle {
     view.palette_(codeView.palette)
-    .font_(codeView.font)
+    .font_(codeView.font.copy.size_(codeView.font.size * 0.8))
     .background_(codeView.palette.base.alpha_(0.9))
     .selectedStringColor_(Color.gray(codeView.palette.baseText.asHSV[2].round))
     .hiliteColor_(codeView.palette.base.blend(codeView.palette.base.complementary, 0.2));

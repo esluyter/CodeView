@@ -39,7 +39,7 @@ CodeView : SCViewHolder {
       punctuation: "[<>\\&\\{\\}\\(\\)\\[\\]\\.\\,\\;:!\\=\\+\\-\\*\\/\\%\\|]"
     );
 
-    this.view = TextView(parent, argbounds)
+    this.view = CodeViewNew(parent, argbounds)
     .enterInterpretsSelection_(false)
     .mouseUpAction_({
       this.changed(\mouseClicked);
@@ -66,7 +66,7 @@ CodeView : SCViewHolder {
 
     this.font_(Font.monospace);
 
-    this.oneDarkColorScheme;
+    this.oneLightColorScheme;
   }
 
   open { |path|
@@ -191,6 +191,7 @@ CodeView : SCViewHolder {
   font_ { |afont|
     font = afont;
     italicfont = font.copy.italic_(true);
+    this.view.font_(afont);
     this.colorize;
   }
 
@@ -287,6 +288,7 @@ CodeView : SCViewHolder {
 
   /* -------- PRIVATE ----------- */
   colorize { |wholething = true, proposedStart, proposedEnd, flexibleBounds = true|
+    /*
     var start, end, foundEnd = false;
     var lastToken = "", lastTokenStart = 0;
 
@@ -485,6 +487,7 @@ CodeView : SCViewHolder {
         };
       };
     };
+    */
   }
 
   indentAt { |lineStart|
