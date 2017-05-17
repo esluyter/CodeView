@@ -98,8 +98,8 @@ CodeView : SCViewHolder {
     this.colorScheme_((
       background: Color.new255(250, 250, 250),
       text: Color.new255(56, 58, 66),
-      selectionBackground: Color.new255(229, 229, 230),
-      selectionText: Color.new255(56, 58, 66),
+      selectionBackground: Color.new255(225, 225, 228),
+      selectionText: Color.new255(126, 126, 126),
       keyword: Color.new255(168, 28, 166),
       envvar: Color.new255(230, 85, 68),
       class: Color.new255(194, 133, 0),
