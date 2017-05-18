@@ -1,6 +1,6 @@
 CodeViewCompleteWindow : SCViewHolder {
   var <win, <codeView, <height, <>autoHide = true, hideRout, lastToken, lastSelectedMethod, <isFront = false,
-  <>toFrontAction, <>endFrontAction, codeViewParentWindow, <listActions, completed, selected, colors, selectionOffset, rout;
+  <>toFrontAction, <>endFrontAction, codeViewParentWindow, <listActions, completed, selected, colors, selectionOffset, listDocumentation;
 
   *new { |codeView, bounds, codeViewParentWindow|
     ^super.new.init(codeView, bounds, codeViewParentWindow);
@@ -206,35 +206,47 @@ CodeViewCompleteWindow : SCViewHolder {
 
     complete = class.findRespondingMethodFor(token.asSymbol).notNil;
     class = [class] ++ class.superclasses;
-    rout = {
-      0.01.wait;
-      view.items = [class[0].name ++ ":" ++ token  ++ if (complete) { "" } { " ..." }] ++ class.collect({ |item| item.methods ?? [] }).flat.select({ |method|
-        if (token.size == 0) { true } {
-          method.name.asString.beginsWith(token);
-        };
-      }).collect({ |item|
-        var classMethod = item.ownerClass.name.asString.beginsWith("Meta_");
-        var helpClass = if (classMethod) { item.ownerClass.name.asString[5..] } { item.ownerClass.name.asString };
-        var helpMethod = (if (classMethod) { "*" } { "-" }) ++ item.name;
-        var helpText = try { if (SCDoc.documents["Classes/" ++ helpClass].makeMethodList.collect(_.asSymbol).includes(("_" ++ helpMethod).asSymbol)) { SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE).children.collect(_.text).join } };
 
-        listActions = listActions.add({ // TODO : figure out why this doesn't show method completions right away
-
-          self.complete(item.name ++ "()", start, token.size, -1);
-        });
-        if (item.ownerClass.name.asString.beginsWith("Meta_")) {
-          "   *"
-        } {
-          "    "
-        } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
-      });
-
-      selectionOffset = 1;
-      if (complete) {
-        completed = 0;
+    view.items = [class[0].name ++ ":" ++ token  ++ if (complete) { "" } { " ..." }] ++ class.collect({ |item| item.methods ?? [] }).flat.select({ |method|
+      if (token.size == 0) { true } {
+        method.name.asString.beginsWith(token);
       };
-      self.select(0);
-    }.fork(AppClock);
+    }).collect({ |item, i|
+      var classMethod = item.ownerClass.name.asString.beginsWith("Meta_");
+      var helpClass = if (classMethod) { item.ownerClass.name.asString[5..] } { item.ownerClass.name.asString };
+      var helpMethod = (if (classMethod) { "*" } { "-" }) ++ item.name;
+      var method = item;
+      var methodIsDocumented = if (classMethod) {
+        try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
+      } {
+        try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
+      };
+      var helpText = if (methodIsDocumented) {
+        listDocumentation = listDocumentation.add([helpClass, helpMethod]);
+        "..."
+      } {
+        listDocumentation = listDocumentation.add(nil);
+        nil
+      };
+
+      //var helpText = "whatever " ++ i;
+
+      listActions = listActions.add({ // TODO : figure out why this doesn't show method completions right away
+
+        self.complete(item.name ++ "()", start, token.size, -1);
+      });
+      if (item.ownerClass.name.asString.beginsWith("Meta_")) {
+        "   *"
+      } {
+        "    "
+      } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
+    });
+
+    selectionOffset = 1;
+    if (complete) {
+      completed = 0;
+    };
+    self.select(0);
 
     ^true;
   }
@@ -245,9 +257,9 @@ CodeViewCompleteWindow : SCViewHolder {
     this.showCompletions;
 
     // for speed, look up only small methods for small token input
-    if (token.size < 3) {
+    if (token.size < 2) {
       methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
-        |item| item.name.asString.size < (token.size + 3) && (item.name.asString.beginsWith(token))
+        |item| item.name.asString.size < (token.size + 1) && (item.name.asString.beginsWith(token))
       });
     } {
       methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
@@ -276,15 +288,32 @@ CodeViewCompleteWindow : SCViewHolder {
         var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
         var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
         var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
-        var helpText = try { if (SCDoc.documents["Classes/" ++ helpClass].makeMethodList.collect(_.asSymbol).includes(("_" ++ helpMethod).asSymbol)) { SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE).children.collect(_.text).join } };
+        var methodIsDocumented = if (classMethod) {
+          try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
+        } {
+          try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
+        };
+        var helpText = if (methodIsDocumented) {
+          listDocumentation = listDocumentation.add([helpClass, helpMethod]);
+          "..."
+        } {
+          listDocumentation = listDocumentation.add(nil);
+          nil
+        };
 
         method.ownerClass.name  ++ "]" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
-      } { "(" ++ count.size.asString ++ "): " ++ count.collect({ |item| item.ownerClass.name.asString }).join(", ") ++ "]" };
+      } {
+        listDocumentation = listDocumentation.add(nil);
+        count.size.asString ++ " classes: " ++ count.collect({ |item| item.ownerClass.name.asString }).join(", ") ++ "]"
+      };
     };
 
     view.items = ["." ++ token ++ if (complete) { "" } { " ..." }] ++ method;
 
     selectionOffset = 1;
+    if (complete) {
+      completed = 0
+    };
     this.select(0);
 
     ^true;
@@ -311,8 +340,13 @@ CodeViewCompleteWindow : SCViewHolder {
     var classMethod = class.asString.beginsWith("Meta_");
     var helpClass = if (classMethod) { class.asString[5..] } { class.asString };
     var helpMethod = if (classMethod) { "*" ++ token } { "-" ++ token };
-    var helpNode = SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE);
-    var helpText = if (helpNode.notNil) { helpNode.children.collect(_.text).join } { SCDoc.documents["Classes/" ++ helpClass].summary };
+
+    var helpText = try {
+      var prefix = "";
+      var doc = SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY);
+      doc = doc.findChild(\PROSE) ?? { prefix = "Returns "; doc.findChild(\RETURNS).findChild(\PROSE) };
+      prefix ++ doc.children.collect(_.text).join
+    };
 
     this.showCompletions;
     method = class.findRespondingMethodFor(token.asSymbol);
@@ -348,7 +382,18 @@ CodeViewCompleteWindow : SCViewHolder {
       var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
       var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
       var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
-      var helpText = try { if (SCDoc.documents["Classes/" ++ helpClass].makeMethodList.collect(_.asSymbol).includes(("_" ++ helpMethod).asSymbol)) { SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY).findChild(\PROSE).children.collect(_.text).join } };
+      var methodIsDocumented = if (classMethod) {
+        try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
+      } {
+        try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
+      };
+      var helpText = if (methodIsDocumented) {
+        listDocumentation = listDocumentation.add([helpClass, helpMethod]);
+        "..."
+      } {
+        listDocumentation = listDocumentation.add(nil);
+        nil
+      };
 
       listActions = listActions.add({
         var class = method.ownerClass;
@@ -425,13 +470,32 @@ CodeViewCompleteWindow : SCViewHolder {
     string = string.asString;
     codeView.setString(string, start, size);
     codeView.select((start + string.size + cursorOffset), 0);
+    this.update(what: \keyPressed);
   }
 
   select { |index|
     var colors = Color.clear.dup(listActions.size);
+    var listIndex = index + selectionOffset;
+    var item = view.items[listIndex] ?? "";
+
+    if (item.endsWith("...")) {
+      var helpClass = listDocumentation[index][0];
+      var helpMethod = listDocumentation[index][1];
+
+      var helpText = try {
+        var prefix = "";
+        var doc = SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY);
+        doc = doc.findChild(\PROSE) ?? { prefix = "Returns "; doc.findChild(\RETURNS).findChild(\PROSE) };
+        prefix ++ doc.children.collect(_.text).join
+      };
+
+      view.items = view.items[listIndex] = item.replace("...", helpText);
+    };
+
     selected = index;
+
     if (selected + selectionOffset < listActions.size) {
-      colors[selectionOffset + selected] = view.background.complementary.blend(Color.yellow).alpha_(0.25);
+      colors[listIndex] = view.background.complementary.blend(Color.yellow).alpha_(0.25);
     };
     if (completed.notNil) {
       colors[selectionOffset + completed] = view.background.complementary.blend(Color.green).alpha_(0.2);
@@ -489,9 +553,9 @@ CodeViewCompleteWindow : SCViewHolder {
 
       // reset list actions
       listActions = [nil];
+      listDocumentation = [];
       selected = 0;
       completed = nil;
-      rout.stop; rout = nil;
 
       // don't auto complete if there's a selection
       if (codeView.selectionSize > 0) {
