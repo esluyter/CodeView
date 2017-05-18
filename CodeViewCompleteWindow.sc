@@ -1,5 +1,5 @@
 CodeViewCompleteWindow : SCViewHolder {
-  var <win, <codeView, <height, <>autoHide = true, hideRout, lastToken, lastSelectedMethod, <isFront = false,
+  var <win, <codeView, <height, <>autoHide = true, hideRout, showRout, lastToken, lastSelectedMethod, <isFront = false,
   <>toFrontAction, <>endFrontAction, codeViewParentWindow, <listActions, completed, selected, colors, selectionOffset, listDocumentation;
 
   *new { |codeView, bounds, codeViewParentWindow|
@@ -57,15 +57,20 @@ CodeViewCompleteWindow : SCViewHolder {
     win.close;
   }
 
-  showCompletions {
+  showCompletions { |wait=1|
     hideRout.stop;
-    if (win.bounds.height == 1) {
-      win.bounds = win.bounds.height_(height).top_(win.bounds.top - height + 1);
-    };
+    showRout.stop;
+    showRout = {
+      wait.wait;
+      if (win.bounds.height == 1) {
+        win.bounds = win.bounds.height_(height).top_(win.bounds.top - height + 1);
+      };
+    }.fork(AppClock);
     lastSelectedMethod = nil;
   }
 
   hideCompletions {
+    showRout.stop;
     view.items = [];
     if (win.bounds.height != 1 && autoHide) {
       hideRout.stop;
@@ -181,12 +186,16 @@ CodeViewCompleteWindow : SCViewHolder {
     complete = Class.allClasses.detect({ |class| class.name == token.asSymbol }).notNil;
 
     view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
-      class.name.asString.beginsWith(token);
+      var name = class.name.asString;
+      var isMeta = name.beginsWith("Meta_");
+      var tokenIsMeta = token.beginsWith("Meta");
+      name.beginsWith(token) && ((isMeta && tokenIsMeta) || isMeta.not);
     }).collect({ |item|
       var helpClass = item.name;
-      var helpText = SCDoc.documents["Classes/" ++ helpClass].summary;
+      var helpDoc = SCDoc.documents["Classes/" ++ helpClass];
+      var helpText = if (helpDoc.notNil) { " - " ++ helpDoc.summary } { "" };
       listActions = listActions.add({ this.complete(item.name, start, token.size) });
-      "   " ++ item.name ++ " - " ++ helpText;
+      "   " ++ item.name ++ helpText;
     });
 
     selectionOffset = 1;

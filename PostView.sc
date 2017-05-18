@@ -74,13 +74,13 @@ PostView : SCViewHolder {
   }
   darkColorScheme {
     this.colorScheme = (
-      background: Color.new255(18, 8, 0).alpha_(0.9),
-      text: Color.new255(247, 251, 239),
+      background: Color.new255(53, 53, 59).alpha_(0.9),
+      text: Color.new255(216, 216, 216),
       selectionBackground: Color.new255(188, 210, 255),
       selectionText: Color.new255(42, 1, 0),
-      success: Color.new255(135, 213, 0),
-      warning: Color.new255(214, 163, 0),
-      error: Color.new255(234, 43, 36)
+      success: Color.new255(139, 203, 95),
+      warning: Color.new255(223, 161, 9),
+      error: Color.new255(255, 117, 113)
     )
   }
 
@@ -93,6 +93,7 @@ PostView : SCViewHolder {
         var tokenStart, token;
         # tokenStart, token = arr;
         view.setStringColor(colorScheme[type], tokenStart + start, token.size);
+        view.setFont(font, tokenStart + start, token.size);
       };
     };
   }
