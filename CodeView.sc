@@ -512,22 +512,35 @@ CodeView : SCViewHolder {
     };
   }
 
-  braceBalance { |lineToCursor, nextChar|
+  braceBalance { |lineToCursor, lineFromCursor|
     var balance = 0;
+    var beforeBalance = 0;
     var extraNewLine = false;
+    var nextChar = lineFromCursor[0];
 
     matchChars.do { |arr|
       var beginChar = arr[0], endChar = arr[1];
-      balance = balance + lineToCursor.findAll(beginChar).size - lineToCursor.findAll(endChar).size;
+
+      balance = balance + lineToCursor.findAll(beginChar).size - lineToCursor.findAll(endChar).size +
+      lineFromCursor.findAll(beginChar).size - lineFromCursor.findAll(endChar).size;
+
+      beforeBalance = beforeBalance + lineToCursor.findAll(beginChar).size - lineToCursor.findAll(endChar).size;
     };
 
     balance = max(balance, -1);
     balance = min(balance, 1);
 
-    if (balance == 1) {
+    if (balance == 0) {
       if ((nextChar == $}) || (nextChar == $)) || (nextChar == $])) {
+        balance = 1;
         extraNewLine = true;
       };
+    };
+    if (balance == -1)  {
+      balance = 0;
+    };
+    if (beforeBalance > 0) {
+      balance = 1;
     };
 
     ^[balance * tabWidth, extraNewLine];
@@ -759,6 +772,7 @@ CodeView : SCViewHolder {
     };
     var lineSize = lineEnd - lineStart;
     var lineToCursor = view.string[lineStart..(selectionStart - 1)];
+    var lineFromCursor = view.string[(selectionStart + selectionSize)..lineEnd];
     var currentLineEnd = (selectionStart + (stringFromSelectionStart.find($\n) ?? stringFromSelectionStart.size));
     var currentLine = (if ((currentLineEnd - lineStart) == 0) { "" } { view.string[lineStart..(currentLineEnd - 1)] });
 
@@ -924,7 +938,7 @@ CodeView : SCViewHolder {
         };
 
       } { // ...otherwise insert newline with correct indent
-        # runningOffset, extraNewLine = this.braceBalance(lineToCursor, stringForward[0]); // add or subtract from total indent
+        # runningOffset, extraNewLine = this.braceBalance(lineToCursor, lineFromCursor); // add or subtract from total indent
         if (extraNewLine) {
           this.setString("\n" ++ String.newFrom($ .dup(currentIndentSpaces)), selectionStart, selectionSize);
           view.select(selectionStart, 0);
