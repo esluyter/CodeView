@@ -90,6 +90,12 @@ CodeView : SCViewHolder {
     palette.highlightText = colorScheme[\selectionText];
 
     view.palette = palette;
+
+    colorScheme.keysValuesDo { |key, color|
+      view.setProperty((key ++ "Color").asSymbol, color)
+    };
+
+
     this.colorize;
     this.changed(\colorScheme);
   }
@@ -100,6 +106,10 @@ CodeView : SCViewHolder {
       text: Color.new255(56, 58, 66),
       selectionBackground: Color.new255(225, 225, 228),
       selectionText: Color.new255(126, 126, 126),
+      highlight: Color.new255(240, 240, 241),
+      lineNumber: Color.new255(189, 190, 192),
+      lineNumberSel: Color.new255(56, 58, 66),
+      lineNumberSelBg: Color.new255(230, 230, 230),
       keyword: Color.new255(168, 28, 166),
       envvar: Color.new255(230, 85, 68),
       class: Color.new255(194, 133, 0),
@@ -119,6 +129,10 @@ CodeView : SCViewHolder {
       text: Color.new255(9, 3, 0),
       selectionBackground: Color.new255(60, 90, 163),
       selectionText: Color.new255(95, 164, 215),
+      highlight: Color.new255(246, 242, 227),
+      lineNumber: Color.new255(152, 164, 147),
+      lineNumberSel: Color.new255(109, 118, 106),
+      lineNumberSelBg: Color.new255(224, 231, 212),
       keyword: Color.new255(141, 53, 0),
       envvar: Color.new255(153, 51, 62),
       class: Color.new255(52, 0, 207),
@@ -138,6 +152,10 @@ CodeView : SCViewHolder {
       text: Color.new255(171, 178, 192),
       selectionBackground: Color.new255(62, 68, 82),
       selectionText: Color.new255(171, 178, 192),
+      highlight: Color.new255(48, 55, 66),
+      lineNumber: Color.new255(75, 82, 100),
+      lineNumberSel: Color.new255(171, 178, 192),
+      lineNumberSelBg: Color.new255(50, 60, 75),
       keyword: Color.new255(199, 117, 223),
       envvar: Color.new255(226, 107, 115),
       class: Color.new255(230, 193, 118),
@@ -157,6 +175,10 @@ CodeView : SCViewHolder {
       text: Color.gray(0.85),
       selectionBackground: Color(0.188, 0.286, 0.5),
       selectionText: Color.gray(0.9),
+      highlight: Color.new255(48, 55, 66),
+      lineNumber: Color.new255(75, 82, 100),
+      lineNumberSel: Color.new255(171, 178, 192),
+      lineNumberSelBg: Color.new255(50, 60, 75),
       keyword: Color(0.2, 0.4, 0.7),
       envvar: Color(0.9, 0.9, 0.6),
       class: Color(0.6, 0.95, 0.95),
