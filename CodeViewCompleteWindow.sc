@@ -1,6 +1,6 @@
 CodeViewCompleteWindow : SCViewHolder {
   var <win, <codeView, <height, <>autoHide = true, hideRout, showRout, lastToken, lastSelectedMethod, <isFront = false,
-  <>toFrontAction, <>endFrontAction, codeViewParentWindow, <listActions, completed, selected, colors, selectionOffset, listDocumentation;
+  <>toFrontAction, <>endFrontAction, codeViewParentWindow, <listActions, completed, selected, colors, selectionOffset, listDocumentation, visible = false;
 
   *new { |codeView, bounds, codeViewParentWindow|
     ^super.new.init(codeView, bounds, codeViewParentWindow);
@@ -49,8 +49,9 @@ CodeViewCompleteWindow : SCViewHolder {
   visible {
     ^win.visible;
   }
+
   visible_ { |bool|
-    win.visible = bool;
+    win.visible_(bool);
   }
 
   close {
@@ -58,12 +59,15 @@ CodeViewCompleteWindow : SCViewHolder {
   }
 
   showCompletions { |wait=1|
+    var self = this;
     hideRout.stop;
     showRout.stop;
     showRout = {
       wait.wait;
-      if (win.bounds.height == 1) {
+      if (visible.not) {
         win.bounds = win.bounds.height_(height).top_(win.bounds.top - height + 1);
+        visible = true;
+        self.update(self, \textInserted);
       };
     }.fork(AppClock);
     lastSelectedMethod = nil;
@@ -77,6 +81,7 @@ CodeViewCompleteWindow : SCViewHolder {
       hideRout = fork {
         0.5.wait;
         defer { this.forceHideCompletions };
+        visible = false;
       };
     };
   }
@@ -93,39 +98,41 @@ CodeViewCompleteWindow : SCViewHolder {
     var fileName, rawPath, rawPathUp;
 
     if (File.exists(path)) {
-      this.showCompletions;
-      path = PathName(path);
-      fileName = PathName(str).fileName;
-      rawPath = str.findRegexp(".*\\/")[0][1];
-      try {
-        rawPathUp = str.findRegexp("(.*\\/).*?\\/")[1][1];
-      } {
-        rawPathUp = "/" ++ path.allFolders.asArray.reverse[1..].reverse.join("/");
+      { 0.1.wait; this.showCompletions }.fork(AppClock);
+      if (visible) {
+        path = PathName(path);
+        fileName = PathName(str).fileName;
+        rawPath = str.findRegexp(".*\\/")[0][1];
+        try {
+          rawPathUp = str.findRegexp("(.*\\/).*?\\/")[1][1];
+        } {
+          rawPathUp = "/" ++ path.allFolders.asArray.reverse[1..].reverse.join("/");
+        };
+
+        listActions = listActions ++ [
+          { this.complete("\"" ++ rawPath ++ "\"", start, token.size, -1) },
+          { this.complete("\"" ++ rawPathUp ++ "\"", start, token.size, -1) }
+        ];
+
+        view.items = [token ++ " ...", ".", ".."]
+        ++
+        path.folders.select({ |folderpath|
+          if (fileName == "") { true } { folderpath.folderName.beginsWith(fileName) };
+        }).collect({ |folderpath|
+          listActions = listActions.add({ this.complete("\"" ++ rawPath ++ folderpath.folderName ++ "/\"", start, token.size, -1) });
+          folderpath.folderName ++ "/"
+        })
+        ++
+        path.files.select({ |filepath|
+          if (fileName == "") { true } { filepath.fileName.beginsWith(fileName) };
+        }).collect({ |filepath|
+          listActions = listActions.add({ this.complete("\"" ++ rawPath ++ filepath.fileName ++ "\"", start, token.size, -1) });
+          filepath.fileName
+        });
+
+        selectionOffset = 1;
+        this.select(2);
       };
-
-      listActions = listActions ++ [
-        { this.complete("\"" ++ rawPath ++ "\"", start, token.size, -1) },
-        { this.complete("\"" ++ rawPathUp ++ "\"", start, token.size, -1) }
-      ];
-
-      view.items = [token ++ " ...", ".", ".."]
-      ++
-      path.folders.select({ |folderpath|
-        if (fileName == "") { true } { folderpath.folderName.beginsWith(fileName) };
-      }).collect({ |folderpath|
-        listActions = listActions.add({ this.complete("\"" ++ rawPath ++ folderpath.folderName ++ "/\"", start, token.size, -1) });
-        folderpath.folderName ++ "/"
-      })
-      ++
-      path.files.select({ |filepath|
-        if (fileName == "") { true } { filepath.fileName.beginsWith(fileName) };
-      }).collect({ |filepath|
-        listActions = listActions.add({ this.complete("\"" ++ rawPath ++ filepath.fileName ++ "\"", start, token.size, -1) });
-        filepath.fileName
-      });
-
-      selectionOffset = 1;
-      this.select(2);
 
       ^true;
     };
@@ -135,45 +142,47 @@ CodeViewCompleteWindow : SCViewHolder {
   showEnvVarCompletions { |token, start|
     var complete, items, envir;
 
-    this.showCompletions;
+    { 0.1.wait; this.showCompletions }.fork(AppClock);
+    if (visible) {
 
-    if (currentEnvironment.isKindOf(Environment)) {
-      envir = currentEnvironment; // for regular Environments
-    };
-    if (currentEnvironment.isKindOf(EnvironmentRedirect)) {
-      envir = currentEnvironment.envir; // for ProxySpaces, etc.
-    };
-    if (envir.isNil) { // if it's something weird just return.
-      this.hideCompletions;
-      ^false;
-    };
-    complete = envir.keys.detect({ |item| item.asString == token[1..] }).notNil;
-
-    items = [
-      token ++ if (complete) { "" } { " ..." },
-      "In currentEnvironment ("
-        ++ if (currentEnvironment.class.asString[0].isVowel) { "an " } { "a " }
-        ++ currentEnvironment.class.asString ++ "):"
-    ];
-    listActions = listActions.add(nil); // extra line...
-
-    envir.keys.asArray.select({ |item|
-      if (token.size > 1) {
-        item.asString.beginsWith(token[1..])
-      } {
-        true
+      if (currentEnvironment.isKindOf(Environment)) {
+        envir = currentEnvironment; // for regular Environments
       };
-    }).sort.do { |envvar|
-      listActions = listActions.add({ this.complete("~" ++ envvar, start, token.size) });
-      items = items.add("   ~" ++ envvar ++ " -> " ++ currentEnvironment[envvar].asString);
-    };
+      if (currentEnvironment.isKindOf(EnvironmentRedirect)) {
+        envir = currentEnvironment.envir; // for ProxySpaces, etc.
+      };
+      if (envir.isNil) { // if it's something weird just return.
+        this.hideCompletions;
+        ^false;
+      };
+      complete = envir.keys.detect({ |item| item.asString == token[1..] }).notNil;
 
-    view.items = items;
-    selectionOffset = 2;
-    if (complete) {
-      completed = 0;
+      items = [
+        token ++ if (complete) { "" } { " ..." },
+        "In currentEnvironment ("
+          ++ if (currentEnvironment.class.asString[0].isVowel) { "an " } { "a " }
+          ++ currentEnvironment.class.asString ++ "):"
+      ];
+      listActions = listActions.add(nil); // extra line...
+
+      envir.keys.asArray.select({ |item|
+        if (token.size > 1) {
+          item.asString.beginsWith(token[1..])
+        } {
+          true
+        };
+      }).sort.do { |envvar|
+        listActions = listActions.add({ this.complete("~" ++ envvar, start, token.size) });
+        items = items.add("   ~" ++ envvar ++ " -> " ++ currentEnvironment[envvar].asString);
+      };
+
+      view.items = items;
+      selectionOffset = 2;
+      if (complete) {
+        completed = 0;
+      };
+      this.select(0);
     };
-    this.select(0);
 
     ^true;
   }
@@ -181,28 +190,29 @@ CodeViewCompleteWindow : SCViewHolder {
   showClassCompletions { |token, start|
     var complete;
 
-    this.showCompletions;
+    { 0.1.wait; this.showCompletions }.fork(AppClock);
+    if (visible) {
+      complete = Class.allClasses.detect({ |class| class.name == token.asSymbol }).notNil;
 
-    complete = Class.allClasses.detect({ |class| class.name == token.asSymbol }).notNil;
+      view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
+        var name = class.name.asString;
+        var isMeta = name.beginsWith("Meta_");
+        var tokenIsMeta = token.beginsWith("Meta");
+        name.beginsWith(token) && ((isMeta && tokenIsMeta) || isMeta.not);
+      }).collect({ |item|
+        var helpClass = item.name;
+        var helpDoc = SCDoc.documents["Classes/" ++ helpClass];
+        var helpText = if (helpDoc.notNil) { " - " ++ helpDoc.summary } { "" };
+        listActions = listActions.add({ this.complete(item.name, start, token.size) });
+        "   " ++ item.name ++ helpText;
+      });
 
-    view.items = [token ++ if (complete) { "" } { " ..." }] ++ Class.allClasses.select({ |class|
-      var name = class.name.asString;
-      var isMeta = name.beginsWith("Meta_");
-      var tokenIsMeta = token.beginsWith("Meta");
-      name.beginsWith(token) && ((isMeta && tokenIsMeta) || isMeta.not);
-    }).collect({ |item|
-      var helpClass = item.name;
-      var helpDoc = SCDoc.documents["Classes/" ++ helpClass];
-      var helpText = if (helpDoc.notNil) { " - " ++ helpDoc.summary } { "" };
-      listActions = listActions.add({ this.complete(item.name, start, token.size) });
-      "   " ++ item.name ++ helpText;
-    });
-
-    selectionOffset = 1;
-    if (complete) {
-      completed = 0;
+      selectionOffset = 1;
+      if (complete) {
+        completed = 0;
+      };
+      this.select(0);
     };
-    this.select(0);
 
     ^true;
   }
@@ -211,51 +221,53 @@ CodeViewCompleteWindow : SCViewHolder {
     var complete;
     var self = this;
 
-    self.showCompletions;
+    { 0.1.wait; self.showCompletions }.fork(AppClock);
 
-    complete = class.findRespondingMethodFor(token.asSymbol).notNil;
-    class = [class] ++ class.superclasses;
+    if (visible) {
+      complete = class.findRespondingMethodFor(token.asSymbol).notNil;
+      class = [class] ++ class.superclasses;
 
-    view.items = [class[0].name ++ ":" ++ token  ++ if (complete) { "" } { " ..." }] ++ class.collect({ |item| item.methods ?? [] }).flat.select({ |method|
-      if (token.size == 0) { true } {
-        method.name.asString.beginsWith(token);
-      };
-    }).collect({ |item, i|
-      var classMethod = item.ownerClass.name.asString.beginsWith("Meta_");
-      var helpClass = if (classMethod) { item.ownerClass.name.asString[5..] } { item.ownerClass.name.asString };
-      var helpMethod = (if (classMethod) { "*" } { "-" }) ++ item.name;
-      var method = item;
-      var methodIsDocumented = if (classMethod) {
-        try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
-      } {
-        try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
-      };
-      var helpText = if (methodIsDocumented) {
-        listDocumentation = listDocumentation.add([helpClass, helpMethod]);
-        "..."
-      } {
-        listDocumentation = listDocumentation.add(nil);
-        nil
-      };
+      view.items = [class[0].name ++ ":" ++ token  ++ if (complete) { "" } { " ..." }] ++ class.collect({ |item| item.methods ?? [] }).flat.select({ |method|
+        if (token.size == 0) { true } {
+          method.name.asString.beginsWith(token);
+        };
+      }).collect({ |item, i|
+        var classMethod = item.ownerClass.name.asString.beginsWith("Meta_");
+        var helpClass = if (classMethod) { item.ownerClass.name.asString[5..] } { item.ownerClass.name.asString };
+        var helpMethod = (if (classMethod) { "*" } { "-" }) ++ item.name;
+        var method = item;
+        var methodIsDocumented = if (classMethod) {
+          try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
+        } {
+          try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
+        };
+        var helpText = if (methodIsDocumented) {
+          listDocumentation = listDocumentation.add([helpClass, helpMethod]);
+          "..."
+        } {
+          listDocumentation = listDocumentation.add(nil);
+          nil
+        };
 
-      //var helpText = "whatever " ++ i;
+        //var helpText = "whatever " ++ i;
 
-      listActions = listActions.add({ // TODO : figure out why this doesn't show method completions right away
+        listActions = listActions.add({ // TODO : figure out why this doesn't show method completions right away
 
-        self.complete(item.name ++ "()", start, token.size, -1);
+          self.complete(item.name ++ "()", start, token.size, -1);
+        });
+        if (item.ownerClass.name.asString.beginsWith("Meta_")) {
+          "   *"
+        } {
+          "    "
+        } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
       });
-      if (item.ownerClass.name.asString.beginsWith("Meta_")) {
-        "   *"
-      } {
-        "    "
-      } ++ item.name ++ "(" ++ item.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
-    });
 
-    selectionOffset = 1;
-    if (complete) {
-      completed = 0;
+      selectionOffset = 1;
+      if (complete) {
+        completed = 0;
+      };
+      self.select(0);
     };
-    self.select(0);
 
     ^true;
   }
@@ -263,37 +275,138 @@ CodeViewCompleteWindow : SCViewHolder {
   showMethodCompletions { |token, start|
     var method, methods, complete = false;
 
-    this.showCompletions;
+    { 0.1.wait; this.showCompletions }.fork(AppClock);
+    if (visible) {
 
-    // for speed, look up only small methods for small token input
-    if (token.size < 2) {
-      methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
-        |item| item.name.asString.size < (token.size + 1) && (item.name.asString.beginsWith(token))
-      });
-    } {
-      methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
-        |item| item.name.asString.beginsWith(token)
-      });
+      // for speed, look up only small methods for small token input
+      if (token.size < 2) {
+        methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
+          |item| item.name.asString.size < (token.size + 1) && (item.name.asString.beginsWith(token))
+        });
+      } {
+        methods = Class.allClasses.collect({ |item| item.methods ?? [] }).flat.select({
+          |item| item.name.asString.beginsWith(token)
+        });
+      };
+
+      method = methods.collect({ |item|
+        if (item.ownerClass.name.asString.beginsWith("Meta_")) {
+          "   *"
+        } {
+          "    "
+        } ++ item.name;
+      }).asSet.asArray.sort({ |a, b| a[4..] < b[4..] });
+
+      method = method.collect { |item|
+        var count = methods.select({ |m| m.name == item[4..].asSymbol });
+
+        if (item[4..] == token) { complete = true };
+
+        listActions = listActions.add({ // TODO : figure out why this doesn't open up completions for method
+          this.complete(item[4..] ++ "()", start, token.size, -1)
+        });
+        item ++ " [" ++ if (count.size == 1) {
+          var method = count[0];
+          var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
+          var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
+          var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
+          var methodIsDocumented = if (classMethod) {
+            try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
+          } {
+            try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
+          };
+          var helpText = if (methodIsDocumented) {
+            listDocumentation = listDocumentation.add([helpClass, helpMethod]);
+            "..."
+          } {
+            listDocumentation = listDocumentation.add(nil);
+            nil
+          };
+
+          method.ownerClass.name  ++ "]" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
+        } {
+          listDocumentation = listDocumentation.add(nil);
+          count.size.asString ++ " classes: " ++ count.collect({ |item| item.ownerClass.name.asString }).join(", ") ++ "]"
+        };
+      };
+
+      view.items = ["." ++ token ++ if (complete) { "" } { " ..." }] ++ method;
+
+      selectionOffset = 1;
+      if (complete) {
+        completed = 0
+      };
+      this.select(0);
     };
 
-    method = methods.collect({ |item|
-      if (item.ownerClass.name.asString.beginsWith("Meta_")) {
-        "   *"
-      } {
-        "    "
-      } ++ item.name;
-    }).asSet.asArray.sort({ |a, b| a[4..] < b[4..] });
+    ^true;
+  }
 
-    method = method.collect { |item|
-      var count = methods.select({ |m| m.name == item[4..].asSymbol });
+  showClassNewArguments { |token|
+    this.showCompletions;
+    if (visible) {
+      var method;
+      var helpClass = token;
+      var helpText = SCDoc.documents["Classes/" ++ helpClass].summary;
 
-      if (item[4..] == token) { complete = true };
-
-      listActions = listActions.add({ // TODO : figure out why this doesn't open up completions for method
-        this.complete(item[4..] ++ "()", start, token.size, -1)
+      method = token.asSymbol.asClass.class.findRespondingMethodFor(\new);
+      view.items = [
+        token ++ "(" ++ method.argNames[1..].join(", ") ++ ")",
+        helpText
+      ] ++ method.argumentString.split($,).collect({ |item|
+        "   " ++ item.stripWhiteSpace
       });
-      item ++ " [" ++ if (count.size == 1) {
-        var method = count[0];
+    }
+    ^true;
+  }
+
+  showMethodArguments { |class, token|
+    this.showCompletions;
+
+    if (visible) {
+      var method;
+      var classMethod = class.asString.beginsWith("Meta_");
+      var helpClass = if (classMethod) { class.asString[5..] } { class.asString };
+      var helpMethod = if (classMethod) { "*" ++ token } { "-" ++ token };
+
+      var helpText = try {
+        var prefix = "";
+        var doc = SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY);
+        doc = doc.findChild(\PROSE) ?? { prefix = "Returns "; doc.findChild(\RETURNS).findChild(\PROSE) };
+        prefix ++ doc.children.collect(_.text).join
+      };
+
+      method = class.findRespondingMethodFor(token.asSymbol);
+
+      if (method.isNil) {
+        this.hideCompletions;
+        ^false;
+      };
+
+      view.items = if (method.argNames.notNil) {
+        [
+          class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")",
+          helpText
+        ] ++ (method.argumentString ?? "").split($,).collect({ |item|
+          "   " ++ item.stripWhiteSpace
+        });
+      } {
+        if (method.name.asString.endsWith("_")) {
+          [class.name ++ ":" ++ token ++ "(value)", "   value"]
+        } {
+          [class.name ++ ":" ++ token ++ "()", ""];
+        };
+      };
+    };
+    ^true;
+  }
+
+  selectClassForMethod { |possibleClasses, token|
+    this.showCompletions;
+    if (visible) {
+      view.items = ["." ++ token] ++ possibleClasses.collect({ |item|
+        var method = item.findMethod(token.asSymbol);
+
         var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
         var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
         var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
@@ -310,111 +423,18 @@ CodeViewCompleteWindow : SCViewHolder {
           nil
         };
 
-        method.ownerClass.name  ++ "]" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
-      } {
-        listDocumentation = listDocumentation.add(nil);
-        count.size.asString ++ " classes: " ++ count.collect({ |item| item.ownerClass.name.asString }).join(", ") ++ "]"
-      };
-    };
+        listActions = listActions.add({
+          var class = method.ownerClass;
+          lastSelectedMethod = method.name;
+          listActions = [nil];
+          this.showMethodArguments(class, method.name);
+        });
 
-    view.items = ["." ++ token ++ if (complete) { "" } { " ..." }] ++ method;
-
-    selectionOffset = 1;
-    if (complete) {
-      completed = 0
-    };
-    this.select(0);
-
-    ^true;
-  }
-
-  showClassNewArguments { |token|
-    var method;
-    var helpClass = token;
-    var helpText = SCDoc.documents["Classes/" ++ helpClass].summary;
-
-    this.showCompletions;
-    method = token.asSymbol.asClass.class.findRespondingMethodFor(\new);
-    view.items = [
-      token ++ "(" ++ method.argNames[1..].join(", ") ++ ")",
-      helpText
-    ] ++ method.argumentString.split($,).collect({ |item|
-      "   " ++ item.stripWhiteSpace
-    });
-    ^true;
-  }
-
-  showMethodArguments { |class, token|
-    var method;
-    var classMethod = class.asString.beginsWith("Meta_");
-    var helpClass = if (classMethod) { class.asString[5..] } { class.asString };
-    var helpMethod = if (classMethod) { "*" ++ token } { "-" ++ token };
-
-    var helpText = try {
-      var prefix = "";
-      var doc = SCDoc.getMethodDoc(helpClass, helpMethod).findChild(\METHODBODY);
-      doc = doc.findChild(\PROSE) ?? { prefix = "Returns "; doc.findChild(\RETURNS).findChild(\PROSE) };
-      prefix ++ doc.children.collect(_.text).join
-    };
-
-    this.showCompletions;
-    method = class.findRespondingMethodFor(token.asSymbol);
-
-    if (method.isNil) {
-      this.hideCompletions;
-      ^false;
-    };
-
-    view.items = if (method.argNames.notNil) {
-      [
-        class.name ++ ":" ++ token ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")",
-        helpText
-      ] ++ (method.argumentString ?? "").split($,).collect({ |item|
-        "   " ++ item.stripWhiteSpace
+        "   " ++ method.asString ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
       });
-    } {
-      if (method.name.asString.endsWith("_")) {
-        [class.name ++ ":" ++ token ++ "(value)", "   value"]
-      } {
-        [class.name ++ ":" ++ token ++ "()", ""];
-      };
-    };
-    ^true;
-  }
-
-  selectClassForMethod { |possibleClasses, token|
-    this.showCompletions;
-
-    view.items = ["." ++ token] ++ possibleClasses.collect({ |item|
-      var method = item.findMethod(token.asSymbol);
-
-      var classMethod = method.ownerClass.name.asString.beginsWith("Meta_");
-      var helpClass = if (classMethod) { method.ownerClass.name.asString[5..] } { method.ownerClass.name.asString };
-      var helpMethod = (if (classMethod) { "*" } { "-" }) ++ method.name;
-      var methodIsDocumented = if (classMethod) {
-        try { SCDoc.documents["Classes/" ++ helpClass].doccmethods.findMatch(method.name.asSymbol).notNil } { false }
-      } {
-        try { SCDoc.documents["Classes/" ++ helpClass].docimethods.findMatch(method.name.asSymbol).notNil } { false }
-      };
-      var helpText = if (methodIsDocumented) {
-        listDocumentation = listDocumentation.add([helpClass, helpMethod]);
-        "..."
-      } {
-        listDocumentation = listDocumentation.add(nil);
-        nil
-      };
-
-      listActions = listActions.add({
-        var class = method.ownerClass;
-        lastSelectedMethod = method.name;
-        listActions = [nil];
-        this.showMethodArguments(class, method.name);
-      });
-
-      "   " ++ method.asString ++ "(" ++ method.argNames.asArray[1..].join(", ") ++ ")" ++ if (helpText.notNil) { " - " ++ helpText } { "" }
-    });
-    selectionOffset = 1;
-    this.select(0);
+      selectionOffset = 1;
+      this.select(0);
+    }
 
     ^true;
   }
