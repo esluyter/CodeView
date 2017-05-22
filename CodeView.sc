@@ -3,8 +3,7 @@ CodeView : SCViewHolder {
   var <palette, <colorScheme, <tokens;
   var <customTokens, <customColors;
   var <>modKeyHandler, <>keyUpAction;
-  var paste, suppressKeyPress = false, undoHistory, redoHistory;
-  var colorizeRout;
+  var paste, suppressKeyPress = false;
   var <>interpretArgs;
 
   *new { |parent, bounds|
@@ -13,8 +12,6 @@ CodeView : SCViewHolder {
 
   init { |argparent, argbounds|
     parent = argparent;
-
-    this.resetHistory;
 
     matchChars = [
       [$", $"],
@@ -57,7 +54,6 @@ CodeView : SCViewHolder {
       };
       if (paste.notNil) {
         pasteSize = view.string.size - paste[\stringSize];
-        this.colorize(false, paste[\start], paste[\start] + pasteSize);
         this.changed(\textInserted, paste[\start], pasteSize);
         paste = nil;
       };
@@ -71,7 +67,6 @@ CodeView : SCViewHolder {
 
   open { |path|
     view.open(path);
-    this.colorize;
   }
 
   makeCompleteWindow { |bounds, parentWindow| // in offset from top left corner
@@ -96,7 +91,6 @@ CodeView : SCViewHolder {
     };
 
 
-    this.colorize;
     this.changed(\colorScheme);
   }
 
@@ -194,12 +188,10 @@ CodeView : SCViewHolder {
 
   customTokens_ { |value|
     customTokens = value;
-    this.colorize;
   }
 
   customColors_ { |value|
     customColors = value;
-    this.colorize;
   }
 
   string {
@@ -207,14 +199,12 @@ CodeView : SCViewHolder {
   }
   string_ { |string|
     view.string_(string.reject({|char| (char.ascii < 32 && (char != $\n)) || (char.ascii == 127)}));
-    this.colorize;
   }
 
   font_ { |afont|
     font = afont;
     italicfont = font.copy.italic_(true);
     this.view.font_(afont);
-    this.colorize;
   }
 
   select { |start, size|
@@ -227,80 +217,6 @@ CodeView : SCViewHolder {
     ^view.selectionSize;
   }
 
-  resetHistory {
-    undoHistory = [];
-    redoHistory = [];
-  }
-  undo {
-    var string, start, size, oldstring, item, isWordChar = true, isDelete, prevstart, prevstring;
-    item = undoHistory.pop;
-    if (item.isNil) { ^false };
-
-    #string, start, size, oldstring = item;
-    prevstart = start;
-    isDelete = string.size == 0;
-
-    // undo to previous non-wordchar
-    while {isWordChar || isDelete} {
-      redoHistory = redoHistory.add([string, start, size, oldstring]); // add this to redo history
-      this.setString(oldstring, start, string.size, false); // don't add this to the history
-      view.select(start + size, 0);
-
-      prevstart = start;
-      prevstring = string;
-
-      item = undoHistory.pop;
-      if (item.isNil) { ^false };
-
-      #string, start, size, oldstring = item;
-      isWordChar = (string.size == 1 && "\\w".matchRegexp(string)
-        && ((prevstart - start).abs < 2) && "\\w".matchRegexp(prevstring));
-      isDelete = isDelete && (string.size == 0);
-    };
-
-    if ((prevstart - start).abs < 2 && (string.size == 1 && "\\s".matchRegexp(string))) { // undo immediately preceding space
-      redoHistory = redoHistory.add([string, start, size, oldstring]); // add this to redo history
-      this.setString(oldstring, start, string.size, false); // don't add this to the history
-      view.select(start, 0);
-    } { // otherwise, don't undo
-      undoHistory = undoHistory.add([string, start, size, oldstring]); // add unused back to undo history
-    };
-
-    ^true;
-  }
-  redo {
-    var string, start, size, oldstring, item, isWordChar = true, isDelete, prevstart, prevstring;
-
-    item = redoHistory.pop;
-    if (item.isNil) { ^false };
-
-    #string, start, size, oldstring = item;
-    prevstart = start;
-    isDelete = string.size == 0;
-
-    // undo to previous non-wordchar
-    while {isWordChar || isDelete} {
-      undoHistory = undoHistory.add([string, start, size, oldstring]); // add this back to undo history
-      this.setString(string, start, size, false); // don't add this to the history
-      view.select(start + string.size, 0);
-
-      prevstart = start;
-      prevstring = string;
-
-      item = redoHistory.pop;
-      if (item.isNil) { ^false };
-
-      #string, start, size, oldstring = item;
-      isWordChar = (string.size == 1 && "\\w".matchRegexp(string)
-        && ((prevstart - start).abs < 2) && "\\w|\\s".matchRegexp(prevstring));
-      isDelete = isDelete && (string.size == 0);
-    };
-
-    redoHistory = redoHistory.add([string, start, size, oldstring]); // add unused back to redo history
-
-    ^true;
-  }
-
   editable {
     ^view.editable;
   }
@@ -309,209 +225,6 @@ CodeView : SCViewHolder {
   }
 
   /* -------- PRIVATE ----------- */
-  colorize { |wholething = true, proposedStart, proposedEnd, flexibleBounds = true|
-    /*
-    var start, end, foundEnd = false;
-    var lastToken = "", lastTokenStart = 0;
-
-    if (view.string.size == 0) {
-      ^false; // can't colorize nothing
-    };
-
-    if (flexibleBounds.not) {
-      start = proposedStart;
-      end = proposedEnd;
-    } {
-      // set prelim start & end
-      if (wholething) {
-        proposedStart = 0; proposedEnd = 0; //proposedEnd = view.string.size;
-
-        colorizeRout.stop;
-        if (view.string.size > 1000) {
-          colorizeRout = {
-            0.01.wait;
-            while {proposedEnd < view.string.size} {
-              proposedEnd = min(view.string.size, proposedStart + 1000);
-              //[proposedStart, proposedEnd].postln;
-              this.colorize(false, proposedStart, proposedEnd, false);
-              proposedStart = proposedEnd;
-              0.3.wait;
-            };
-          }.fork(AppClock);
-        } {
-          this.colorize(false, 0, view.string.size);
-        };
-
-        ^true;
-      } {
-        proposedStart = proposedStart ?? view.selectionStart;
-        proposedEnd = proposedEnd ?? (view.selectionStart + view.selectionSize);
-
-        start = proposedStart;
-
-        // expand to line break
-        ([0] ++ view.string.findAll($\n) ++ [view.string.size]).do { |linebreak|
-          if (linebreak < start) {
-            proposedStart = linebreak;
-          } {
-            if (foundEnd.not && (linebreak > proposedEnd)) {
-              proposedEnd = linebreak;
-              foundEnd = true;
-            };
-          };
-        };
-      };
-
-      start = proposedStart;
-      end = proposedEnd;
-
-      // extend boundary for long tokens
-      [\longComment, \string, \symbol].do { |thing|
-        var regexp = tokens[thing];
-
-        view.string.findRegexp(regexp, 0).do({ |item|
-          var itemStart = item[0], itemEnd = itemStart + item[1].size;
-
-          if ((itemStart <= proposedEnd) && (itemEnd >= proposedStart)) {
-            if (itemStart < start) { proposedStart = max(start - 500, itemStart) };
-            if (itemEnd > end) { proposedEnd = min(end + 500, itemEnd) };
-          };
-        });
-      };
-
-      start = proposedStart;
-      end = proposedEnd;
-    };
-
-    // reset everything
-    view.setStringColor(colorScheme[\text], start, end - start);
-    view.setFont(font, start, end - start);
-
-    // methods & punctuation
-    [\method, \punctuation].do { |thing|
-      var color = colorScheme[thing];
-      var regexp = tokens[thing];
-
-      view.string.findRegexp(regexp, 0).select({ |item|
-        (item[0] >= start) && (item[0] < end);
-      }).do { |result|
-        view.setStringColor(color, result[0], result[1].size);
-
-        lastTokenStart = result[0];
-        lastToken = result[1];
-      };
-    };
-
-    // non-wordchar delimited things
-    [\number, \envvar, \keyword].do { |thing|
-      var color = colorScheme[thing];
-      var regexp = "(\\W|^)(" ++ tokens[thing] ++ ")(\\W|$)";
-
-      view.string.findRegexp(regexp, 0).select({ |item|
-        (item[0] >= start) && (item[0] < end) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
-      }).do { |result|
-        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
-            && lastToken.contains(result[1])) { // and contains this one,
-          // skip it
-        } {
-          view.setStringColor(color, result[0], result[1].size);
-
-          lastTokenStart = result[0];
-          lastToken = result[1];
-        };
-      };
-    };
-
-    // classes
-    [\class].do { |thing|
-      var color = colorScheme[thing];
-      var regexp = "(\\W|^)(" ++ tokens[thing] ++ ")(\\W|$)";
-
-      view.string.findRegexp(regexp, 0).select({ |item|
-        (item[0] >= start) && (item[0] < end) && (("^(" ++ tokens[thing] ++ ")$").matchRegexp(item[1]));
-      }).select({ |item|
-        Class.allClasses.detect({ |class| class.name == item[1].asSymbol }).notNil;
-      }).do { |result|
-        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
-            && lastToken.contains(result[1])) { // and contains this one,
-          // skip it
-        } {
-          view.setStringColor(color, result[0], result[1].size);
-
-          lastTokenStart = result[0];
-          lastToken = result[1];
-        };
-      };
-    };
-
-    // other language items
-    [\key, \symbol, \string].do { |thing|
-      var color = colorScheme[thing];
-      var regexp = tokens[thing];
-
-      view.string.findRegexp(regexp, 0).select({ |item|
-        ((item[0] >= start) && (item[0] < end))
-          || ((item[0] + item[1].size >= start) && (item[0] + item[1].size < end))
-          || ((item[0] < start) && (item[0] + item[1].size > end));
-      }).do { |result|
-        var thisSize;
-
-        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
-            && lastToken.contains(result[1])) { // and contains this one,
-          // skip it
-        } {
-          thisSize = min(end, result[0] + result[1].size) - result[0]; // only do the amount in this range
-          view.setStringColor(color, result[0], thisSize);
-
-          lastTokenStart = result[0];
-          lastToken = result[1];
-        };
-      };
-    };
-
-    // comments
-    [\comment, \partialComment, \longComment].do { |thing|
-      var color = colorScheme[\comment];
-      var regexp = tokens[thing];
-
-      view.string.findRegexp(regexp, 0).select({ |item|
-        ((item[0] >= start) && (item[0] < end))
-          || ((item[0] + item[1].size >= start) && (item[0] + item[1].size < end))
-          || ((item[0] < start) && (item[0] + item[1].size > end));
-      }).do { |result|
-        var thisSize;
-
-        if (abs(lastTokenStart - result[0]) < min(lastToken.size, result[1].size) // if the last token is close to this one
-            && lastToken.contains(result[1])) { // and contains this one,
-          // skip it
-        } {
-          thisSize = min(end, result[0] + result[1].size) - result[0]; // only do the amount in this range
-          view.setStringColor(color, result[0], thisSize);
-          view.setFont(italicfont, result[0], thisSize);
-
-          lastTokenStart = result[0];
-          lastToken = result[1];
-        };
-      };
-    };
-
-    // custom
-    if (customTokens.notNil) {
-      customTokens.keysValuesDo { |thing, regexp|
-        var color = customColors[thing];
-
-        if (color.notNil) {
-          view.string.findRegexp(regexp, 0).select({ |item|
-            (item[0] >= start) && (item[0] < end);
-          }).do { |result|
-            view.setStringColor(color, result[0], result[1].size);
-          };
-        };
-      };
-    };
-    */
-  }
-
   indentAt { |lineStart|
     this.setString(String.newFrom($ .dup(tabWidth)), lineStart, 0);
     ^tabWidth;
@@ -726,10 +439,8 @@ CodeView : SCViewHolder {
     ^([token.asString, type] ++ if (getStart) { start } { [] } ++ prevToken);
   }
 
-  setString { |aString, start, size, addToHistory = true|
-    if (addToHistory) { this.addToHistory(aString, start, size) };
+  setString { |aString, start, size|
     view.setString(aString, start, size);
-    this.colorize(false, start, start + aString.size);
     this.changed(\textInserted, start, aString.size);
   }
 
@@ -762,15 +473,6 @@ CodeView : SCViewHolder {
       error.reportError;
       ^false;
     };
-  }
-
-  addToHistory { |string, start, size|
-    var oldstring = "";
-    if (size > 0) {
-      oldstring = view.string[start..(start + size - 1)];
-    };
-    undoHistory = undoHistory.add([string, start, size, oldstring]);
-    redoHistory = [];
   }
 
   handleKey { |view, char, mod, unicode, keycode, key|
@@ -826,7 +528,6 @@ CodeView : SCViewHolder {
         } {
           view.selectedString = beginChar ++ view.selectedString ++ endChar;
         };
-        this.colorize(false, selectionStart, selectionStart + selectionSize + 2);
         view.select(selectionStart + 1, selectionSize);
         ^true;
       };
@@ -852,12 +553,10 @@ CodeView : SCViewHolder {
         };
 
         this.setString("", selectionStart - 1, 1);
-        this.colorize(false);
         ^true;
       };
 
       this.setString("", selectionStart, selectionSize);
-      this.colorize(false);
       ^true;
     };
 
@@ -901,27 +600,7 @@ CodeView : SCViewHolder {
         }).join("\n");
 
         this.setString(region, lineStart, lineEnd - lineStart);
-        this.colorize(false, lineStart, lineStart + region.size);
         this.select(lineStart, region.size);
-
-        /* -------
-        {
-          ([0] ++ view.string.findAll($\n).collect(_ + 1)) // all lines..
-          .select(_ >= lineStart).select(_ < lineEnd) //.. between selection
-          .do { |lineStart, i|
-            lineStart = lineStart + runningOffset; // account for previous indents
-
-            runningOffset = runningOffset + if (mod.isShift) {
-              this.deindentAt(lineStart);
-            } {
-              this.indentAt(lineStart);
-            };
-
-            if (i % 5 == 4) { 0.01.wait };
-
-          };
-        }.fork(AppClock);
-        */
       };
       ^true;
     };
@@ -1027,15 +706,6 @@ CodeView : SCViewHolder {
       paste = (start: selectionStart, stringSize: view.string.size - selectionSize);
     };
 
-    if (key == 90 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // undo cmd-z
-      this.undo;
-      ^true;
-    };
-    if (key == 89 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // redo cmd-y
-      this.redo;
-      ^true;
-    };
-
     if (key == 16777235 && mod.isCmd && mod.isAlt.not && mod.isShift.not) { // cmd-up
       this.changed(\cmdup);
       ^true;
@@ -1058,6 +728,11 @@ CodeView : SCViewHolder {
 
     if (key == 32 && mod.isShift && mod.isAlt.not && mod.isCmd.not) { // shift-space
       this.changed(\shiftspace);
+      ^true;
+    };
+
+    if (key == 32 && mod.isShift && mod.isAlt.not && mod.isCmd) { // cmd-shift-space
+      this.changed(\cmdshiftspace);
       ^true;
     };
 
@@ -1124,7 +799,6 @@ CodeView : SCViewHolder {
 
     // ...otherwise insert character
     this.setString(char.asString, selectionStart, selectionSize);
-    this.colorize(false);
     ^true;
   }
 }
