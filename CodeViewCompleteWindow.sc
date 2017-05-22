@@ -81,15 +81,17 @@ CodeViewCompleteWindow : SCViewHolder {
       hideRout = fork {
         0.5.wait;
         defer { this.forceHideCompletions };
-        visible = false;
       };
     };
   }
 
   forceHideCompletions {
+    showRout.stop;
+    hideRout.stop;
     height = win.bounds.height;
     win.bounds = win.bounds.height_(1).top_(win.bounds.top + height - 1);
     lastSelectedMethod = nil;
+    visible = false;
   }
 
   showPathCompletions { |token, start|
@@ -173,7 +175,7 @@ CodeViewCompleteWindow : SCViewHolder {
         };
       }).sort.do { |envvar|
         listActions = listActions.add({ this.complete("~" ++ envvar, start, token.size) });
-        items = items.add("   ~" ++ envvar ++ " -> " ++ currentEnvironment[envvar].asString);
+        items = items.add("   ~" ++ envvar ++ " -> " ++ currentEnvironment[envvar].asCompileString);
       };
 
       view.items = items;
@@ -559,6 +561,9 @@ CodeViewCompleteWindow : SCViewHolder {
     };
     if (what == \cmdleft || (what == \cmdright) || (what == \shiftspace)) {
       listActions[selected + selectionOffset].();
+    };
+    if (what == \cmdshiftspace) {
+      if (visible) { this.forceHideCompletions } { this.showCompletions(0) };
     };
 
     if (what == \keyPressed || (what == \mouseClicked) || (what == \textInserted)) {
