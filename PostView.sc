@@ -1,3 +1,4 @@
+/*
 PostView : SCViewHolder {
   var <parent, firstTime = true, <colorScheme, <palette, <font, <tokens, <>mute = false, prevStr;
   classvar <all;
@@ -98,3 +99,4 @@ PostView : SCViewHolder {
     };
   }
 }
+*/

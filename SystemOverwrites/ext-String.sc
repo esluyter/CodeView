@@ -3,10 +3,10 @@
 	prPost { _PostString }
 	postln {
 		this.prPostln;
-		defer { PostView.postln(this); PostViewNew.postln(this) };
+		defer { PostView.postln(this); };
 	}
 	post {
 		this.prPost;
-		defer { PostView.post(this); PostViewNew.postln(this) };
+		defer { PostView.post(this); };
 	}
 }
